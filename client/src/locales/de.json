@@ -1,0 +1,39 @@
+{
+  "language_label": "Wählen Sie eine Sprache:",
+  "landing_heading": "{ Willkommen bei ECS }",
+  "create_account_button": "Konto erstellen",
+  "login_button": "Anmelden",
+  "start_page_label": "Startseite",
+  "landing_page_label": "Landingpage",
+  "footer_left": "© Universität von Florida, Wahre digitale Poiesis",
+  "footer_right": "Verfasst von: Dulick, Hasty, Law, Maxwell, Pope",
+  "username_label": "Benutzername",
+  "password_label": "Passwort",
+  "confirm_password_label": "Passwort bestätigen",
+  "create_account_msg": "Erstellen Sie Ihr Konto",
+  "back_t": "Zurück",
+
+  "cubic_level_title": "Würfel-Ebene",
+  "cubic_level_instructions": "Willkommen auf der WÜRFEL-EBENE! \n\nSo interagierst du mit dem Würfel:\n   • Drehe den Würfel durch Klicken und Ziehen.\n   • Klicke auf eine Seite, um das zugehörige Textfeld zu öffnen.\n   • Verwende den \"Dateien einfügen\"-Button, um Dateien hinzuzufügen. Nur EINE Datei kann pro Seite hinzugefügt werden.\n   • Klicke auf \"Speichern\", um deine Änderungen zu speichern.\n   • Klicke unten rechts auf den \"Excel\"-Button, um die Daten im Tabellenformat zu sehen.\n   • Klicke auf den \"Download\"-Button, um die Daten und Dateien herunterzuladen.",
+  "criteria_instructions_t": "Kriterienanweisungen: ",
+
+  "cube_faces": {
+    "who": "Wer",
+    "what": "Was",
+    "when": "Wann",
+    "where": "Wo",
+    "why": "Warum",
+    "how": "Wie"
+  },
+
+  "insert_files_button": "DATEIEN EINFÜGEN",
+  "save_button": "SPEICHERN",
+  "text_label": "Text",
+  "files_label": "Dateien",
+  "placeholder_t": "Hier eingeben...",
+  "placeholder_none": "Keine.",
+
+  "instruction_msg": "Diese App ist übersetzt!",
+  "welcome_msg": "Willkommen!"
+}
+  

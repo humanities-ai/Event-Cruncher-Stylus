@@ -1,0 +1,47 @@
+.selection-container {
+    text-align: center;
+    padding: 20px;
+  }
+  
+  h1 {
+    font-size: 2vw;
+    color: black;
+    z-index: 10;
+    margin-bottom: 20px;
+  }
+  
+  .image-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 20px;
+    justify-content: center;
+    align-items: center;
+    max-width: 400px;
+    margin: 0 auto;
+  }
+  
+  .image-box {
+    width: 20vw;
+    height: 20vw;
+    max-width: 200px;
+    max-height: 200px;
+    min-width: 100px;
+    min-height: 100px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 2px solid #000;
+    cursor: pointer;
+    transition: border-color 0.3s ease;
+  }
+  
+  .image-box.selected {
+    border-color: blue;
+  }
+  
+  .image {
+    max-width: 90%;
+    max-height: 90%;
+    object-fit: contain;
+  }
+  

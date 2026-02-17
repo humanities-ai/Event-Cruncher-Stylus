@@ -1,0 +1,38 @@
+{
+  "language_label": "选择语言：",
+  "landing_heading": "{ 欢迎 }",
+  "create_account_button": "创建账户",
+  "login_button": "登录",
+  "start_page_label": "开始页面",
+  "landing_page_label": "登陆页面",
+  "footer_left": "© 佛罗里达大学，True Digital Poiesis",
+  "footer_right": "作者：Dulick、Hasty、Law、Maxwell、Pope",
+  "username_label": "用户名",
+  "password_label": "密码",
+  "confirm_password_label": "确认密码",
+  "create_account_msg": "创建您的账户",
+  "back_t": "返回",
+
+  "cubic_level_title": "立方层级",
+  "cubic_level_instructions": "欢迎来到立方层级！\n\n以下是与立方体交互的方法：\n   • 通过点击并拖动来旋转立方体。\n   • 点击一个面以打开相应的文本框。\n   • 使用“插入文件”按钮添加文件。每个立方体面只能添加一个文件。\n   • 点击“保存”以存储您的更改。\n   • 点击右下角的“Excel”按钮以电子表格形式查看立方数据。\n   • 点击右下角的“下载”按钮以下载立方数据和上传的文件。",
+  "criteria_instructions_t": "标准说明：",
+
+  "cube_faces": {
+    "who": "谁",
+    "what": "什么",
+    "when": "何时",
+    "where": "何地",
+    "why": "为什么",
+    "how": "如何"
+  },
+
+  "insert_files_button": "插入文件",
+  "save_button": "保存",
+  "text_label": "文本",
+  "files_label": "文件",
+  "placeholder_t": "在此输入……",
+  "placeholder_none": "无。",
+
+  "instruction_msg": "这是已翻译的应用程序！",
+  "welcome_msg": "欢迎！"
+}

@@ -1,0 +1,71 @@
+.display-page {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  background: #000000;
+  overflow: hidden;
+}
+
+/* Canvas fills container */
+.canvas-holder {
+  width: 100%;
+  height: 100%;
+}
+.canvas-holder > canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Hacker text overlay */
+.hack-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.hack-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-size: clamp(32px, 8vw, 84px); /* larger text */
+  letter-spacing: 0.08em;
+  color: #eaf2ff;
+  text-shadow: 0 0 12px rgba(80, 140, 255, 0.8), 0 0 4px rgba(0, 0, 0, 0.9);
+  mix-blend-mode: screen;
+  margin-bottom: 2rem;
+}
+
+/* Start button */
+.start-button {
+  pointer-events: auto;
+  position: absolute;
+  bottom: 80px; /* bottom center */
+  left: 50%;
+  transform: translateX(-50%);
+  
+  background: transparent;        /* transparent like hacker text */
+  color: #eaf2ff;                 /* same as hacker text */
+  border: 2px solid #eaf2ff;      /* glowing border */
+  
+  padding: 16px 36px;
+  font-size: 1.4rem;
+  font-weight: 700;
+  border-radius: 8px;
+  cursor: pointer;
+  
+  text-shadow: 0 0 12px rgba(80, 140, 255, 0.8),
+               0 0 4px rgba(0, 0, 0, 0.9);
+  box-shadow: 0 0 14px rgba(80, 140, 255, 0.6); /* glow around button */
+  
+  transition: all 0.25s ease;
+}
+
+.start-button:hover {
+  background: rgba(80, 140, 255, 0.15); /* faint glow fill on hover */
+  box-shadow: 0 0 20px rgba(80, 140, 255, 1);
+}
+

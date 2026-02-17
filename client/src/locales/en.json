@@ -1,0 +1,39 @@
+{
+  "language_label": "Select a Language:",
+  "landing_heading": "{ Welcome to the ECS }",
+  "create_account_button": "Create Account",
+  "login_button": "Login",
+  "start_page_label": "Start Page",
+  "landing_page_label": "Landing Page",
+  "footer_left": "© University of Florida, True Digital Poiesis",
+  "footer_right": "Authored by: Dulick, Hasty, Law, Maxwell, Pope",
+  "username_label": "Username",
+  "password_label": "Password",
+  "confirm_password_label": "Confirm Password",
+  "create_account_msg": "Create Your Account",
+  "back_t": "Back",
+
+  "cubic_level_title": "Cubic Level",
+  "cubic_level_instructions": "Welcome to the CUBIC LEVEL! \n\nHere’s how to interact with the cube:\n   • Spin the cube by clicking and dragging.\n   • Click on a face to open the corresponding text box.\n   • Use the \"Insert Files\" button to add files. Only ONE file can be added to a cube face.\n   • Click \"Save\" to store your changes.\n   • Click the \"Excel\" button in the bottom right corner to view the cubic data in a spreadsheet format.\n   • Click the \"Download\" button in the bottom right corner to download the cubic data and uploaded files.",
+  "criteria_instructions_t": "Criteria Instructions: ",
+  
+  "cube_faces": {
+    "who": "Who",
+    "what": "What",
+    "when": "When",
+    "where": "Where",
+    "why": "Why",
+    "how": "How"
+  },
+
+  "insert_files_button": "INSERT FILES",
+  "save_button": "SAVE",
+  "text_label": "Text",
+  "files_label": "Files",
+  "placeholder_t": "Type here...",
+  "placeholder_none": "None.",
+
+  "instruction_msg": "This is the app translated!",
+  "welcome_msg": "Welcome!"
+}
+  

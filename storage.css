@@ -1,0 +1,454 @@
+/* DEFAULT FORMATTING */
+* {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background-color: #ffffff;
+}
+
+
+/* CUBE FORMATTING */
+.cubic-level {
+  display: flex;
+  height: 100vh;
+  margin: 0;
+}
+
+.cubic-level-container {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 50%;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.cubic-level-title {
+  text-align: center;
+  font-size: 2rem;
+  margin: 0;
+  padding: 20px 0;
+  width: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.face-label {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin-bottom: 10px;
+  /* text-align: left; */
+  text-align: center;
+  color: #333;
+  position: relative;
+  top: -10px;
+}
+
+
+/* TEXT FORMATTING */
+.text-input-overlay {
+  position: absolute;
+  right: 10%;
+  top: 50%;
+  transform: translateY(-50%);
+  background: white;
+  box-shadow: none;
+  border: none;
+}
+
+.text-input-overlay textarea {
+  width: 100%;
+  height: 500px;
+  margin-bottom: 8px;
+  padding: 16px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  resize: none;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+
+/* TEXT BOX */
+.text-input-overlay button {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.text-input-overlay button:hover {
+  background-color: #0056b3;
+}
+
+
+/* TEXT INPUT AREA */
+.text-area-container {
+  position: relative;
+  width: 100%;
+  height: 500px;
+}
+
+.text-area-container textarea {
+  width: 100%;
+  height: 100%;
+  padding-bottom: 40px;
+  box-sizing: border-box;
+  resize: none;
+}
+
+
+/* FILE LIST */
+.file-list {
+  position: absolute;
+  bottom: 5px;
+  left: 10px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: flex-start;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background-color: #f8f9fa;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 5px 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.file-item span {
+  flex: 1;
+  color: black;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-left: 10px;
+}
+
+.delete-file-button {
+  background: #ff0000 !important;
+  color: #ffffff !important;
+  border: none;
+  font-size: 1rem;
+  border-radius: 4px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.delete-file-button:hover {
+  background: #cc0000 !important;
+}
+
+
+/* CONTAINER FOR BUTTONS */
+.button-container {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+}
+
+
+/* BULLET POINT BUTTON */
+.bullet-button {
+  background-color: #f5f7f6 !important;
+  border: 1px solid #f5f7f6;
+  border-radius: 4px;
+  padding: 5px;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  width: 37px;
+  height: 37px;
+
+  position: relative;
+  top: 37px;
+  left: 5px;
+}
+
+.bullet-button:hover {
+  background-color: #f5f7f6;
+  border-color: #bbb;
+  box-shadow: 0 10px 12px rgba(0, 0, 0, 0.2);
+}
+
+.bullet-image {
+  width: 35px;
+  height: 35px;
+  object-fit: contain;
+}
+
+
+/* UPLOAD (INSERT FILES) BUTTON */
+.upload-button {
+  background-color: #ff9800;
+  color: white;
+  font-size: 1rem;
+  font-weight: bold;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: center;
+
+  position: relative;
+  left: 50px;
+}
+
+.upload-button:hover {
+  background-color: #e68900;
+}
+
+
+/* SAVE BUTTON */
+.save-button {
+  background-color: #007bff;
+  color: white;
+  font-size: 1rem;
+  font-weight: bold;
+  border: none;
+  padding: 9px 16px !important;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.save-button:hover {
+  background-color: #0056b3;
+}
+
+
+/* XLSX BUTTON */
+.xlsx-button {
+  background: white !important;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  position: fixed;
+  z-index: 1000;
+  bottom: 5px;
+  right: 80px;
+}
+
+.xlsx-image {
+  width: 50px;
+  height: 50px;
+}
+
+.xlsx-button:hover {
+  background-color: #f9f9f9;
+  border-color: #bbb;
+  box-shadow: 0 10px 12px rgba(0, 0, 0, 0.2);
+}
+
+
+/* DOWNLOAD BUTTON */
+.download-button {
+  position: fixed;
+  background: white !important;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  position: fixed;
+  z-index: 1000;
+  bottom: 5px;
+  right: 20px;
+}
+
+.download-image {
+  width: 50px;
+  height: 50px;
+}
+
+.download-button:hover {
+  background-color: #f9f9f9;
+  border-color: #bbb;
+  box-shadow: 0 10px 12px rgba(0, 0, 0, 0.2);
+}
+
+
+/* SPREADSHEET (MODAL) POP-UP */
+.ssh-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.ssh-modal-content {
+  background: white;
+  color: black;
+  padding: 45px;
+  border-radius: 8px;
+  width: 80%;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+}
+
+.close-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: red;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.close-button:hover {
+  background-color: #cc0000;
+}
+
+.spreadsheet-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.spreadsheet-table th,
+.spreadsheet-table td {
+  border: 1px solid #ccc;
+  padding: 8px;
+  text-align: left;
+}
+
+.spreadsheet-table th {
+  background-color: #f4f4f4;
+  font-weight: bold;
+}
+
+.spreadsheet-table td:first-child {
+  font-weight: bold;
+  background-color: #f4f4f4;
+}
+
+
+/* CRITERIA INSTRUCTIONS BUTTON */
+.ci-button {
+  background-color: white !important;
+  color: black !important;
+  /* font-weight: bold; */
+  font-size: 1rem;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px !important;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  position: absolute;
+  top: 10px;
+  right: 4px;
+  margin-right: 16px;
+  z-index: 1000;
+  transition: background-color 0.3s ease;
+}
+
+.ci-button:hover {
+  /* background-color: #e9e8e8 !important; */
+  box-shadow: 0px 10px 12px rgba(0, 0, 0, 0.2);
+}
+
+
+/* CRITERIA INSTRUCTIONS (MODAL) POP-UP */
+.ci-modal-overlay {
+  position: fixed;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.ci-modal-content {
+  background: white;
+  color: black !important;
+  padding: 45px;
+  border-radius: 8px;
+  width: 80%;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  text-align: center;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2); 
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.ci-modal-face-label {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin-bottom: 20px;
+  text-align: center;
+  color: black;
+}
+
+.ci-textbox {
+  width: 100%;
+  height: auto;
+  max-height: 90vh;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 10px;
+  font-size: 1rem;
+  resize: none;
+  background-color: #f9f9f9;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+
+/* DEFAULT INSTRUCTIONS TEXT BOX */
+.di-textbox {
+  width: 100%;
+  height: 500px;
+  margin-bottom: 8px;
+  padding: 16px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  resize: none;
+  font-size: 1rem;
+  line-height: 1.5;
+  background-color: #d4fbb8;
+  color: #333;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.di-textbox:focus {
+  outline: none;
+  border-color: #007bff;
+  background-color: #fff;
+}
