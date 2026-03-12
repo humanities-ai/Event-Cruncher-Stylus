@@ -916,6 +916,15 @@ materialsRef.current.forEach((mat, i) => {
         </div>
       )}
 
+      {/* Navigator AI Button */}
+      <Link to="/levels/Navigator" className="nav-ai-button">
+        <img
+          src="/images/buttons/nav-ai-button.jpg"
+          alt="Navigator AI"
+          className="nav-ai-image"
+        />
+      </Link>
+
       {/* XLSX Button */}
       <button className="xlsx-button" onClick={handleXLSXClick}>
         <img src="/images/buttons/excelButton.jpg" alt="XLSX Button" className="xlsx-image" />

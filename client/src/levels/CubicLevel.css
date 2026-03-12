@@ -253,6 +253,8 @@ html, body {
   z-index: 1000;
   bottom: 40px;
   right: 80px;
+
+  transition: transform 0.15s ease;
 }
 
 .xlsx-image {
@@ -261,9 +263,10 @@ html, body {
 }
 
 .xlsx-button:hover {
-  background-color: #f9f9f9;
+  /* background-color: #f9f9f9;
   border-color: #bbb;
-  box-shadow: 0 10px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 10px 12px rgba(0, 0, 0, 0.2); */
+  transform: translateY(-3px);
 }
 
 
@@ -278,6 +281,8 @@ html, body {
   z-index: 1000;
   bottom: 40px;
   right: 20px;
+
+  transition: transform 0.15s ease;
 }
 
 .download-image {
@@ -286,9 +291,10 @@ html, body {
 }
 
 .download-button:hover {
-  background-color: #f9f9f9;
+  /* background-color: #f9f9f9;
   border-color: #bbb;
-  box-shadow: 0 10px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 10px 12px rgba(0, 0, 0, 0.2); */
+  transform: translateY(-3px);
 }
 
 
@@ -454,6 +460,33 @@ html, body {
   margin: 10px auto;
 }
 
+
+/* NAVIGATOR AI BUTTON */
+.nav-ai-button {
+  position: fixed;
+  bottom: 42px;
+  right: 145px;
+  background: white;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  z-index: 1000;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  transition: transform 0.15s ease;
+}
+
+.nav-ai-image {
+  height: 50px;
+  width: auto;
+  display: block;
+}
+
+.nav-ai-button:hover {
+  transform: translateY(-6px);
+}
 
 /* DEFAULT INSTRUCTIONS TEXT BOX */
 .di-textbox {
