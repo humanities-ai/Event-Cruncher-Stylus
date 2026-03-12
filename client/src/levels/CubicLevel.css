@@ -61,6 +61,8 @@ html, body {
   background: white;
   box-shadow: none;
   border: none;
+  width: 35vw;
+  max-width: 600px;
 }
 
 .text-input-overlay textarea {
@@ -353,6 +355,13 @@ html, body {
   background-color: #f4f4f4;
 }
 
+.face-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  position: relative;
+}
 
 /* CRITERIA INSTRUCTIONS BUTTON */
 .ci-button {
@@ -366,9 +375,8 @@ html, body {
   cursor: pointer;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   position: absolute;
-  top: 10px;
-  right: 4px;
-  margin-right: 16px;
+  right: 0;
+  top: -10px;
   z-index: 1000;
   transition: background-color 0.3s ease;
 }

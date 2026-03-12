@@ -44,7 +44,7 @@ function Login() {
       if (response.ok) {
         const { userId } = await response.json();
         localStorage.setItem('loggedInUserId', userId);
-        navigate('/root');
+        navigate('/levels/CubicLevel');
       } else {
         setShowPopup(true);
         setTimeout(() => setShowPopup(false), 3000);

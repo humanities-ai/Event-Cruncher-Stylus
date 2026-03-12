@@ -324,7 +324,7 @@ const CubicLevel = () => {
       0.1,
       1000
     );
-    camera.position.set(4, 4, 4);
+    camera.position.set(3.5, 3.5, 3.5);
     cameraRef.current = camera;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -970,13 +970,15 @@ materialsRef.current.forEach((mat, i) => {
       {selectedFaceIndex !== null && (
         <div className="text-input-overlay">
           {/* Criteria Instructions Button */}
-          <button className="ci-button" onClick={toggleCIModal}>
-            ✱
-          </button>
+          <div className="face-header">
+            <h2 className="face-label">
+              {t(`cube_faces.${faceKeys[selectedFaceIndex]}`)} ?
+            </h2>
 
-          <h2 className="face-label">
-            {t(`cube_faces.${faceKeys[selectedFaceIndex]}`)} ?
-          </h2>
+            <button className="ci-button" onClick={toggleCIModal}>
+              ✱
+            </button>
+          </div>
 
           <div className="text-area-container">
             <textarea
