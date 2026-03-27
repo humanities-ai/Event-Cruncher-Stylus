@@ -76,9 +76,16 @@ export default function Navigator() {
     e.preventDefault();
     if (!prompt.trim()) return;
 
-    const userMessage = { role: "user", content: prompt };
+    // const userMessage = { role: "user", content: prompt };
+    const userMessage = {
+      role: "user",
+      content: prompt,
+      files: uploadedFiles
+    };
+
     setMessages((prev) => [...prev, userMessage]);
     setPrompt("");
+    setUploadedFiles([]);
     setError("");
     setLoading(true);
 
@@ -178,9 +185,25 @@ export default function Navigator() {
                     : "nav-ai-message-system")
                 }
               >
-                <div className="nav-ai-message-bubble">
-                  {msg.content}
+
+                <div className="nav-ai-message-stack">
+
+                  <div className="nav-ai-message-bubble">
+                    {msg.content}
+                  </div>
+
+                  {msg.files && msg.files.length > 0 && (
+                    <div className="nav-ai-message-files">
+                      {msg.files.map((f, i) => (
+                        <div key={i} className="nav-ai-file-tag-inline">
+                          {f.name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                 </div>
+
               </div>
             ))}
 
@@ -219,7 +242,7 @@ export default function Navigator() {
         </button>
 
         <div className="nav-ai-prompt-wrapper">
-          <div className="nav-ai-input-area">
+          <div className={`nav-ai-input-area ${uploadedFiles.length ? "has-files" : ""}`}>
             {uploadedFiles.length > 0 && (
               <div className="nav-ai-file-chip-row">
                 {uploadedFiles.map((f, i) => (
