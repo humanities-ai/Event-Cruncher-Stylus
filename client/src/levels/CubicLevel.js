@@ -919,7 +919,7 @@ materialsRef.current.forEach((mat, i) => {
       {/* Navigator AI Button */}
       <Link to="/levels/Navigator" className="nav-ai-button">
         <img
-          src="/images/buttons/nav-ai-button.jpg"
+          src="/images/buttons/nav-ai-img3.png"
           alt="Navigator AI"
           className="nav-ai-image"
         />
