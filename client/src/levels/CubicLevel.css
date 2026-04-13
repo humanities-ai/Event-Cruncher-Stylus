@@ -161,7 +161,8 @@ html, body {
 .button-container {
   display: flex;
   align-items: flex-end;
-  justify-content: space-between;
+  justify-content: flex-end;
+  gap: 10px;
   width: 100%;
 }
 
@@ -216,8 +217,6 @@ html, body {
   cursor: pointer;
   text-align: center;
 
-  position: relative;
-  left: 50px;
 }
 
 .upload-button:hover {

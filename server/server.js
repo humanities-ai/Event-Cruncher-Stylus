@@ -588,6 +588,38 @@ app.delete('/api/avfiles/delete/:fileId', (req, res) => {
 });
 
 
+// Clear all cube text and file data for a user
+app.delete('/api/avdata/clear/:userId', (req, res) => {
+    const { userId } = req.params;
+
+    if (!userId) {
+        return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    const clearAvData = `UPDATE avdata SET
+        who_text = '', what_text = '', when_text = '',
+        where_text = '', why_text = '', how_text = ''
+        WHERE user_id = ?`;
+
+    db.query(clearAvData, [userId], (err) => {
+        if (err) {
+            console.error('Error clearing avdata:', err.message);
+            return res.status(500).json({ error: 'Database error clearing avdata' });
+        }
+
+        const clearAvFiles = `DELETE FROM avfiles WHERE user_id = ?`;
+        db.query(clearAvFiles, [userId], (err2) => {
+            if (err2) {
+                console.error('Error clearing avfiles:', err2.message);
+                return res.status(500).json({ error: 'Database error clearing avfiles' });
+            }
+
+            res.status(200).json({ message: 'Cube data cleared successfully' });
+        });
+    });
+});
+
+
 // Navigator AI chat endpoint
 app.post("/api/navigator-chat", upload.any(), async (req, res) => {
   try {

@@ -137,9 +137,26 @@ const TetrahedralLevel = () => {
   const [sectorModalTitle, setSectorModalTitle] = useState("");
   const [sectorModalSub, setSectorModalSub] = useState("");
   const [sectorModalBody, setSectorModalBody] = useState("");
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const faceTextsRef = useRef({});
   useEffect(() => { faceTextsRef.current = faceTexts; }, [faceTexts]);
+
+  const buttonRowRef = useRef(null);
+  const trashRef = useRef(null);
+
+  useEffect(() => {
+    if (!buttonRowRef.current || !trashRef.current) return;
+    const sync = () => {
+      const rect = buttonRowRef.current.getBoundingClientRect();
+      const center = rect.top + rect.height / 2;
+      trashRef.current.style.top = `${center - 22}px`;
+      trashRef.current.style.bottom = "auto";
+    };
+    sync();
+    window.addEventListener("resize", sync);
+    return () => window.removeEventListener("resize", sync);
+  }, [selectedFaceIndex]);
 
   useEffect(() => {
     if (selectedFaceIndex !== null && faceTexts[selectedFaceIndex] !== undefined) {
@@ -534,6 +551,18 @@ const TetrahedralLevel = () => {
     },
   ];
 
+  const handleClearConfirm = async () => {
+    setShowClearConfirm(false);
+    if (!userId) return;
+    await fetch(`http://localhost:4000/api/avdata/clear/${userId}`, { method: "DELETE" });
+    setFaceTexts({});
+    setFaceFiles({});
+    setTempFaceFiles({});
+    setInputText("");
+    setSelectedFaceIndex(null);
+    setIsDITextBoxVisible(true);
+  };
+
   const handleSector = async (n) => {
     if (n === 4) {
       // Reset & reactivate
@@ -869,7 +898,7 @@ const TetrahedralLevel = () => {
             </div>
           </div>
 
-          <div className="button-container">
+          <div className="button-container" ref={buttonRowRef}>
             <label className="upload-button">
               <input type="file" onChange={handleFileUpload} style={{ display: "none" }} multiple />
               {t("insert_files_button")}
@@ -923,6 +952,30 @@ const TetrahedralLevel = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Clear Button */}
+      <button ref={trashRef} className="tet-clear-button" onClick={() => setShowClearConfirm(true)} title="Clear all data">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="3 6 5 6 21 6" />
+          <path d="M19 6l-1 14H6L5 6" />
+          <path d="M10 11v6" />
+          <path d="M14 11v6" />
+          <path d="M9 6V4h6v2" />
+        </svg>
+      </button>
+
+      {/* Clear Confirmation Modal */}
+      {showClearConfirm && (
+        <div className="tet-clear-overlay">
+          <div className="tet-clear-box">
+            <p>Do you want to delete all of your data?</p>
+            <div className="tet-clear-actions">
+              <button className="tet-clear-yes" onClick={handleClearConfirm}>Yes</button>
+              <button className="tet-clear-no" onClick={() => setShowClearConfirm(false)}>No</button>
+            </div>
           </div>
         </div>
       )}

@@ -310,10 +310,10 @@ html, body {
 /* ─── UPLOAD BUTTON ───────────────────────────────────────────────────────── */
 .upload-button {
   background-color: #ffffff !important;
-  color: #c9a227 !important;
+  color: #3d5a96 !important;
   font-size: 1rem;
   font-weight: bold;
-  border: 2px solid #c9a227 !important;
+  border: 2px solid #1e2f52 !important;
   padding: 8px 16px !important;
   border-radius: 4px;
   cursor: pointer;
@@ -340,7 +340,6 @@ html, body {
   cursor: pointer;
   text-align: center;
   margin-left: auto;
-  margin-right: 40px;
   align-self: center;
 }
 
@@ -369,6 +368,104 @@ html, body {
 
 .xlsx-button:hover {
   transform: translateY(-3px);
+}
+
+
+/* ─── CLEAR (TRASHCAN) BUTTON ────────────────────────────────────────────────────────── */
+.tet-clear-button {
+  position: fixed;
+  top: 0; /* overridden at runtime by JS */
+  left: calc(25% - 22px);
+  z-index: 1000;
+  background: white !important;
+  color: #222;
+  border: none !important;
+  padding: 0 !important;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.tet-clear-button svg {
+  width: 22px;
+  height: 22px;
+  stroke: #222;
+}
+
+.tet-clear-button:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.22);
+}
+
+/* ─── CLEAR CONFIRMATION MODAL ────────────────────────────────────────────── */
+.tet-clear-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+}
+
+.tet-clear-box {
+  background: white;
+  border-radius: 8px;
+  padding: 32px 40px;
+  max-width: 360px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+}
+
+.tet-clear-box p {
+  font-size: 1rem;
+  color: #222;
+  margin-bottom: 24px;
+}
+
+.tet-clear-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.tet-clear-yes {
+  background: red !important;
+  color: white !important;
+  border: none !important;
+  padding: 9px 24px !important;
+  font-size: 0.95rem;
+  font-weight: 700;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.tet-clear-yes:hover {
+  background: #cc0000 !important;
+}
+
+.tet-clear-no {
+  background: #000000 !important;
+  color: #ffffff !important;
+  border: 1px solid #ccc !important;
+  padding: 9px 24px !important;
+  font-size: 0.95rem;
+  font-weight: 700;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.tet-clear-no:hover {
+  background: #2b2b2b !important;
 }
 
 
