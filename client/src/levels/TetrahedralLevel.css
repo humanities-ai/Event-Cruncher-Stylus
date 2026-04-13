@@ -1,0 +1,507 @@
+/* ─── DEFAULT FORMATTING (matches CubicLevel) ─────────────────────────────── */
+* {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+
+/* ─── TETRAHEDRAL LEVEL LAYOUT ────────────────────────────────────────────── */
+.tetrahedral-level {
+  padding: 0;
+  display: flex;
+  height: 90vh;
+}
+
+.tetrahedral-level-container {
+  position: absolute;
+  left: 0;
+  overflow: hidden;
+  top: 56px;
+  width: 50%;
+  height: calc(100vh - 56px - 36px);
+  /* transparent so the white page background shows through the alpha canvas */
+  background: transparent;
+}
+
+.tetrahedral-level-title {
+  text-align: center;
+  font-size: clamp(32px, 7vw, 60px);
+  margin: 0;
+  padding: 20px 0;
+  width: 100%;
+  position: absolute;
+  top: 50px;
+  left: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+  letter-spacing: 0.08em;
+  color: #0a0a0a;
+}
+
+
+/* ─── FACE LABEL ──────────────────────────────────────────────────────────── */
+.face-label {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin-bottom: 10px;
+  text-align: center;
+  color: #000000;
+  position: relative;
+  top: -10px;
+}
+
+
+/* ─── TEXT INPUT OVERLAY (right panel — same as CubicLevel) ───────────────── */
+.tetrahedral-level .text-input-overlay {
+  position: absolute;
+  right: 10%;
+  top: 50%;
+  transform: translateY(-50%);
+  background: white;
+  box-shadow: none;
+  border: none;
+  width: 35vw;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.text-input-overlay textarea {
+  width: 100%;
+  height: 500px;
+  margin-bottom: 8px;
+  padding: 16px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  resize: none;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.text-input-overlay button {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.text-input-overlay button:hover {
+  background-color: #0056b3;
+}
+
+
+/* ─── ECS SECTOR GRID ─────────────────────────────────────────────────────── */
+.tet-sector-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+
+.tet-sector-btn {
+  background: #f0cc5a !important;
+  border: 2px solid #c9a227 !important;
+  border-radius: 8px;
+  padding: 7px 6px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+  display: flex;
+  flex-direction: column;
+  color: rgba(40, 28, 5, 0.95) !important;
+}
+
+.tet-sector-btn:hover {
+  background: #e0bc48 !important;
+  border-color: #b8911f !important;
+  color: rgba(40, 28, 5, 1) !important;
+}
+
+.tet-s-num {
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(40, 28, 5, 0.75);
+  display: block;
+  margin-bottom: 2px;
+}
+
+.tet-s-lbl {
+  font-size: 11px;
+  color: rgba(40, 28, 5, 0.95);
+  display: block;
+  line-height: 1.3;
+}
+
+
+/* ─── TEXT AREA CONTAINER ─────────────────────────────────────────────────── */
+.text-area-container {
+  position: relative;
+  width: 100%;
+  height: 180px;
+}
+
+.text-area-container textarea {
+  width: 100%;
+  height: 100%;
+  padding-bottom: 40px;
+  box-sizing: border-box;
+  resize: none;
+  background: #efefef;
+}
+
+.textarea-bullet-btn {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.85) !important;
+  border: 1px solid #c9a227 !important;
+  border-radius: 4px;
+  color: #000000 !important;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0 !important;
+  width: 27px;
+  height: 27px;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.textarea-bullet-btn:hover {
+  background: #fffaed !important;
+}
+
+.textarea-numbered-btn {
+  position: absolute;
+  top: 43px;
+  right: 10px;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.85) !important;
+  border: 1px solid #c9a227 !important;
+  border-radius: 4px;
+  color: #000000 !important;
+  font-size: 0.6rem;
+  line-height: 1;
+  padding: 0 !important;
+  width: 27px;
+  height: 27px;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.textarea-numbered-btn:hover {
+  background: #fffaed !important;
+}
+
+
+/* ─── FILE LIST ───────────────────────────────────────────────────────────── */
+.file-list {
+  position: absolute;
+  bottom: 5px;
+  left: 10px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: flex-start;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background-color: #f8f9fa;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 5px 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.file-item span {
+  flex: 1;
+  color: black;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-left: 10px;
+}
+
+.delete-file-button {
+  background: #ff0000 !important;
+  color: #ffffff !important;
+  border: none;
+  font-size: 1rem;
+  border-radius: 4px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.delete-file-button:hover {
+  background: #cc0000 !important;
+}
+
+
+/* ─── BUTTON CONTAINER ────────────────────────────────────────────────────── */
+.button-container {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  width: 100%;
+  min-height: 45px;
+  margin-top: 8px;
+  flex-shrink: 0;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+}
+
+
+/* ─── BULLET BUTTON ───────────────────────────────────────────────────────── */
+.bullet-button {
+  background-color: #f5f7f6 !important;
+  border: 1px solid #f5f7f6 !important;
+  border-radius: 4px;
+  padding: 0 !important;
+  cursor: pointer;
+  display: flex !important;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
+  align-self: center;
+  width: 45px;
+  height: 45px;
+  overflow: hidden;
+}
+
+.bullet-button:hover {
+  background-color: #f5f7f6;
+  border-color: #bbb;
+  box-shadow: 0 10px 12px rgba(0, 0, 0, 0.2);
+}
+
+.bullet-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+
+/* ─── UPLOAD BUTTON ───────────────────────────────────────────────────────── */
+.upload-button {
+  background-color: #ffffff !important;
+  color: #c9a227 !important;
+  font-size: 1rem;
+  font-weight: bold;
+  border: 2px solid #c9a227 !important;
+  padding: 8px 16px !important;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  align-self: center;
+  text-align: center;
+}
+
+.upload-button:hover {
+  background-color: #fffaed !important;
+}
+
+
+/* ─── SAVE BUTTON ─────────────────────────────────────────────────────────── */
+.save-button {
+  background-color: #3d5a96 !important;
+  color: #ffffff !important;
+  font-size: 1rem;
+  font-weight: bold;
+  border: 2px solid #1e2f52 !important;
+  padding: 8px 16px !important;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: center;
+  margin-left: auto;
+  margin-right: 40px;
+  align-self: center;
+}
+
+.save-button:hover {
+  background-color: #1e2f52 !important;
+}
+
+
+/* ─── XLSX BUTTON ─────────────────────────────────────────────────────────── */
+.xlsx-button {
+  background: white !important;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  position: fixed;
+  z-index: 1000;
+  bottom: 40px;
+  right: 80px;
+  transition: transform 0.15s ease;
+}
+
+.xlsx-image {
+  width: 50px;
+  height: 50px;
+}
+
+.xlsx-button:hover {
+  transform: translateY(-3px);
+}
+
+
+/* ─── DOWNLOAD BUTTON ─────────────────────────────────────────────────────── */
+.download-button {
+  background: white !important;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  position: fixed;
+  z-index: 1000;
+  bottom: 40px;
+  right: 20px;
+  transition: transform 0.15s ease;
+}
+
+.download-image {
+  width: 50px;
+  height: 50px;
+}
+
+.download-button:hover {
+  transform: translateY(-3px);
+}
+
+
+/* ─── SPREADSHEET MODAL ───────────────────────────────────────────────────── */
+.ssh-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.ssh-modal-content {
+  background: white;
+  color: black;
+  padding: 45px;
+  border-radius: 8px;
+  width: 80%;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+}
+
+.close-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: red;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.close-button:hover {
+  background-color: #cc0000;
+}
+
+.spreadsheet-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.spreadsheet-table th,
+.spreadsheet-table td {
+  border: 1px solid #ccc;
+  padding: 8px;
+  text-align: left;
+}
+
+.spreadsheet-table th {
+  background-color: #f4f4f4;
+  font-weight: bold;
+}
+
+.spreadsheet-table td:first-child {
+  font-weight: bold;
+  background-color: #f4f4f4;
+}
+
+.face-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  position: relative;
+}
+
+
+/* ─── ECS SECTOR MODAL BODY ───────────────────────────────────────────────── */
+.tet-modal-sub {
+  font-size: 11px;
+  color: #666;
+  margin-bottom: 14px;
+  text-align: center;
+}
+
+.tet-modal-body {
+  font-size: 13px;
+  color: #111;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  text-align: left;
+}
+
+
+/* ─── DEFAULT INSTRUCTIONS TEXTBOX ───────────────────────────────────────── */
+.di-textbox {
+  width: 100%;
+  height: 400px;
+  margin-bottom: 8px;
+  padding: 16px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  resize: none;
+  font-size: 1rem;
+  line-height: 1.5;
+  background-color: #d4fbb8;
+  color: #333;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.di-textbox:focus {
+  outline: none;
+  border-color: #007bff;
+  background-color: #fff;
+}

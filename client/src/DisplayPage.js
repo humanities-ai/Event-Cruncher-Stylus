@@ -15,10 +15,10 @@ export default function DisplayPage() {
       "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+[]{};:,<.>/?";
     let rafId;
     let start = performance.now();
-    const duration = 3600; // ms to fully settle
+    const duration = 600; // ms to fully settle
 
     const scramble = (now) => {
-      const t = Math.min(1, (now - start) / duration);
+      const t = Math.min(1, (now - start)*0.5 / duration);
       const revealed = Math.floor(t * target.length);
 
       let out = "";

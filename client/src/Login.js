@@ -44,7 +44,7 @@ function Login() {
       if (response.ok) {
         const { userId } = await response.json();
         localStorage.setItem('loggedInUserId', userId);
-        navigate('/levels/CubicLevel');
+        navigate('/levels/TetrahedralLevel');
       } else {
         setShowPopup(true);
         setTimeout(() => setShowPopup(false), 3000);

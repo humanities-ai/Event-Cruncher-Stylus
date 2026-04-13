@@ -62,6 +62,10 @@ npm install openai dotenv
 npm install adm-zip
 ```
 
+```shell
+npm install three
+```
+
 # How-To Run the Application
 ## Frontend: 'client'
 
