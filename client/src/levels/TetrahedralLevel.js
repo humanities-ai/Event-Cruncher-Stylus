@@ -956,8 +956,8 @@ const TetrahedralLevel = () => {
         </div>
       )}
 
-      {/* Clear Button */}
-      <button ref={trashRef} className="tet-clear-button" onClick={() => setShowClearConfirm(true)} title="Clear all data">
+      {/* Clear Button — only shown when a face is selected and button row is visible */}
+      {selectedFaceIndex !== null && <button ref={trashRef} className="tet-clear-button" onClick={() => setShowClearConfirm(true)} title="Clear all data">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="3 6 5 6 21 6" />
           <path d="M19 6l-1 14H6L5 6" />
@@ -965,7 +965,7 @@ const TetrahedralLevel = () => {
           <path d="M14 11v6" />
           <path d="M9 6V4h6v2" />
         </svg>
-      </button>
+      </button>}
 
       {/* Clear Confirmation Modal */}
       {showClearConfirm && (
