@@ -14,7 +14,7 @@
   "back_t": "Back",
 
   "cubic_level_title": "Cubic Level",
-  "cubic_level_instructions": "Welcome to the CUBIC LEVEL! \n\nHere’s how to interact with the cube:\n   • Spin the cube by clicking and dragging.\n   • Click on a face to open the corresponding text box.\n   • Use the \"Insert Files\" button to add files. Only ONE file can be added to a cube face.\n   • Click \"Save\" to store your changes.\n   • Click the \"Excel\" button in the bottom right corner to view the cubic data in a spreadsheet format.\n   • Click the \"Download\" button in the bottom right corner to download the cubic data and uploaded files.",
+  "cubic_level_instructions": "WELCOME! \n\nHere’s how to interact with the object:\n   • Spin the object by clicking and dragging.\n   • Click on a face to open the corresponding text box.\n   • Use the \"Insert Files\" button to add files. Only ONE file can be added to a object's face.\n   • Click \"Save\" to save your changes.\n   • Click the \"XLSX\" grid button in the bottom right corner to view your data in a spreadsheet format.\n   • Click the \"Download\" button in the bottom right corner to download the data and uploaded files.",
   "criteria_instructions_t": "Criteria Instructions: ",
   
   "cube_faces": {

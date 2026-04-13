@@ -350,25 +350,30 @@ html, body {
 
 /* ─── XLSX BUTTON ─────────────────────────────────────────────────────────── */
 .xlsx-button {
-  background: white !important;
-  border: none;
-  cursor: pointer;
-  padding: 0;
   position: fixed;
   z-index: 1000;
-  bottom: 40px;
+  bottom: 50px !important;
   right: 80px;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: transform 0.15s ease;
 }
 
-.xlsx-image {
-  width: 50px;
-  height: 50px;
+.xlsx-button svg {
+  width: 38px;
+  height: 38px;
+  stroke: #222;
 }
 
 .xlsx-button:hover {
   transform: translateY(-3px);
 }
+
 
 
 /* ─── CLEAR (TRASHCAN) BUTTON ────────────────────────────────────────────────────────── */
@@ -582,23 +587,17 @@ html, body {
 
 
 /* ─── DEFAULT INSTRUCTIONS TEXTBOX ───────────────────────────────────────── */
-.di-textbox {
+.tetrahedral-level .di-textbox {
   width: 100%;
   height: 400px;
   margin-bottom: 8px;
   padding: 16px;
-  border: 1px solid #ccc;
+  border: 1px solid #1e2f52;
   border-radius: 4px;
-  resize: none;
   font-size: 1rem;
   line-height: 1.5;
-  background-color: #d4fbb8;
-  color: #333;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-
-.di-textbox:focus {
-  outline: none;
-  border-color: #007bff;
-  background-color: #fff;
+  background-color: #f6f5f5;
+  color: #1e2f52;
+  resize: none;
+  box-sizing: border-box;
 }
