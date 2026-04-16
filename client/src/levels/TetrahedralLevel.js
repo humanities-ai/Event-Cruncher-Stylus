@@ -138,6 +138,10 @@ const TetrahedralLevel = () => {
   const [sectorModalSub, setSectorModalSub] = useState("");
   const [sectorModalBody, setSectorModalBody] = useState("");
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [isValidationModalOpen, setIsValidationModalOpen] = useState(false);
+  const [validationResult, setValidationResult] = useState(null);
+  const [validationLoading, setValidationLoading] = useState(false);
+  const [validationError, setValidationError] = useState("");
 
   const faceTextsRef = useRef({});
   useEffect(() => { faceTextsRef.current = faceTexts; }, [faceTexts]);
@@ -164,6 +168,12 @@ const TetrahedralLevel = () => {
     }
   }, [selectedFaceIndex, faceTexts]);
 
+  useEffect(() => {
+    setValidationResult(null);
+    setValidationError("");
+    setIsValidationModalOpen(false);
+  }, [selectedFaceIndex]);
+
   // i18n label keys
   const faceKeys = ["who", "what", "when", "where", "why", "how"];
   const FACES = faceKeys.map((key, i) => ({
@@ -172,11 +182,29 @@ const TetrahedralLevel = () => {
     oppLabel: t(`cube_faces.${faceKeys[i % 2 === 0 ? i + 1 : i - 1]}`).toUpperCase() + "?",
   }));
 
+  const getStatusLabel = (status) => {
+    switch (status) {
+      case "pass":
+        return "Good";
+      case "warn":
+        return "Needs work";
+      case "fail":
+        return "Problem";
+      case "needs_review":
+        return "Review needed";
+      case "revise":
+        return "Revise";
+      default:
+        return "Check";
+    }
+  };
+
   // Three.js refs
   const frontMeshesRef = useRef([]);
   const rendererRef = useRef(null);
   const groupRef = useRef(null);
   const autoSpinRef = useRef(true);
+  const cancelFaceAnimRef = useRef(null); // set by the Three.js effect to cancel in-flight reorientation
 
   // User / data
   const [userId, setUserId] = useState(null);
@@ -391,6 +419,27 @@ const TetrahedralLevel = () => {
     group.rotation.y = 0.5;
     groupRef.current = group;
 
+    // ── Face reorientation animation ─────────────────────────────────────────
+    // Target group rotations so each face's normal points toward the camera (+Z)
+    const FACE_TARGET_ROTS = [
+      { x: 0,              y: -Math.PI / 2 }, // Face 0: +X  WHO
+      { x: 0,              y:  Math.PI / 2 }, // Face 1: -X  WHAT
+      { x:  Math.PI / 2,   y: 0 },            // Face 2: +Y  WHEN
+      { x: -Math.PI / 2,   y: 0 },            // Face 3: -Y  WHERE
+      { x: 0,              y: 0 },             // Face 4: +Z  WHY
+      { x: 0,              y: Math.PI },       // Face 5: -Z  HOW
+    ];
+
+    // Normalize angle to [-PI, PI] for shortest-path lerp
+    const normalizeAngle = (a) => {
+      const TWO_PI = 2 * Math.PI;
+      return a - TWO_PI * Math.floor((a + Math.PI) / TWO_PI);
+    };
+
+    let faceTargetRot = null;
+    let isAnimatingToFace = false;
+    cancelFaceAnimRef.current = () => { isAnimatingToFace = false; faceTargetRot = null; };
+
     // ── Drag to rotate ──────────────────────────────────────────────────────
     let dragging = false;
     let moved = false;
@@ -399,6 +448,8 @@ const TetrahedralLevel = () => {
     const onMouseDown = (e) => {
       dragging = true;
       autoSpinRef.current = false;
+      isAnimatingToFace = false;
+      faceTargetRot = null;
       moved = false;
       px = e.clientX;
       py = e.clientY;
@@ -416,6 +467,8 @@ const TetrahedralLevel = () => {
     const onTouchStart = (e) => {
       dragging = true;
       autoSpinRef.current = false;
+      isAnimatingToFace = false;
+      faceTargetRot = null;
       moved = false;
       px = e.touches[0].clientX;
       py = e.touches[0].clientY;
@@ -462,6 +515,12 @@ const TetrahedralLevel = () => {
       setIsDITextBoxVisible(false);
       autoSpinRef.current = false;
 
+      // Normalize current rotation so the lerp takes the shortest path
+      group.rotation.x = normalizeAngle(group.rotation.x);
+      group.rotation.y = normalizeAngle(group.rotation.y);
+      faceTargetRot = { ...FACE_TARGET_ROTS[idx] };
+      isAnimatingToFace = true;
+
       frontMeshes.forEach((m, i) => {
         const sel = i === idx;
         const label = faceKeys.map((k) => t(`cube_faces.${k}`).toUpperCase() + "?")[i];
@@ -500,6 +559,17 @@ const TetrahedralLevel = () => {
       if (autoSpinRef.current) {
         group.rotation.y += 0.004;
         group.rotation.x += 0.0007;
+      } else if (isAnimatingToFace && faceTargetRot) {
+        const dx = faceTargetRot.x - group.rotation.x;
+        const dy = faceTargetRot.y - group.rotation.y;
+        group.rotation.x += dx * 0.1;
+        group.rotation.y += dy * 0.1;
+        if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) {
+          group.rotation.x = faceTargetRot.x;
+          group.rotation.y = faceTargetRot.y;
+          isAnimatingToFace = false;
+          faceTargetRot = null;
+        }
       }
       renderer.render(scene, camera);
     };
@@ -568,6 +638,7 @@ const TetrahedralLevel = () => {
       // Reset & reactivate
       setSelectedFaceIndex(null);
       setIsDITextBoxVisible(true);
+      cancelFaceAnimRef.current?.();
       autoSpinRef.current = true;
       const faceLabels = faceKeys.map((k) => t(`cube_faces.${k}`).toUpperCase() + "?");
       frontMeshesRef.current.forEach((m, i) => {
@@ -624,8 +695,11 @@ const TetrahedralLevel = () => {
 
     fetchSavedData(userId);
     setInputText("");
+    setValidationResult(null);
+    setValidationError("");
     setSelectedFaceIndex(null);
     setIsDITextBoxVisible(true);
+    cancelFaceAnimRef.current?.();
     autoSpinRef.current = true;
 
     const faceLabels = faceKeys.map((k) => t(`cube_faces.${k}`).toUpperCase() + "?");
@@ -694,6 +768,44 @@ const TetrahedralLevel = () => {
       }
     } catch (error) {
       console.error("Error deleting file:", error);
+    }
+  };
+
+  const handleValidateFace = async () => {
+    if (selectedFaceIndex === null) return;
+
+    const selectedFace = faceKeys[selectedFaceIndex];
+    const draftFaceTexts = faceKeys.reduce((acc, key, index) => {
+      acc[key] = index === selectedFaceIndex ? (inputText || "").trim() : (faceTexts[index] || "").trim();
+      return acc;
+    }, {});
+
+    setIsValidationModalOpen(true);
+    setValidationLoading(true);
+    setValidationError("");
+
+    try {
+      const response = await fetch("http://localhost:4000/api/face-validation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          selectedFace,
+          faceTexts: draftFaceTexts,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Validation failed.");
+      }
+
+      setValidationResult(data);
+    } catch (err) {
+      console.error("Face validation failed:", err);
+      setValidationError(err.message || "Validation failed.");
+      setValidationResult(null);
+    } finally {
+      setValidationLoading(false);
     }
   };
 
@@ -873,7 +985,11 @@ const TetrahedralLevel = () => {
             <textarea
               id="tet-text-area"
               value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
+              onChange={(e) => {
+                setInputText(e.target.value);
+                setValidationResult(null);
+                setValidationError("");
+              }}
               onKeyDown={handleKeyDown}
               placeholder={t("placeholder_t")}
             />
@@ -898,7 +1014,75 @@ const TetrahedralLevel = () => {
               <input type="file" onChange={handleFileUpload} style={{ display: "none" }} multiple />
               {t("insert_files_button")}
             </label>
-<button onClick={handleSave} className="save-button">{t("save_button")}</button>
+            <button onClick={handleSave} className="save-button">{t("save_button")}</button>
+          </div>
+        </div>
+      )}
+
+      {isValidationModalOpen && (
+        <div className="tet-validation-modal-overlay">
+          <div className="tet-validation-modal">
+            <button
+              className="close-button"
+              onClick={() => setIsValidationModalOpen(false)}
+              disabled={validationLoading}
+            >
+              X
+            </button>
+            <div className="tet-validation-head">
+              <div>
+                <h3>Face check</h3>
+                <p>Checks length automatically and uses AI to review fit and consistency.</p>
+              </div>
+            </div>
+
+            {validationLoading && <div className="tet-validation-loading">Checking this face now...</div>}
+            {validationError && <div className="tet-validation-error">{validationError}</div>}
+
+            {validationResult && (
+              <div className="tet-validation-body">
+                <div className={`tet-validation-badge is-${validationResult.overallStatus || "warn"}`}>
+                  Overall: {getStatusLabel(validationResult.overallStatus)}
+                </div>
+
+                <div className="tet-validation-grid">
+                  <div className="tet-validation-card">
+                    <span className={`tet-validation-pill is-${validationResult.length?.status || "warn"}`}>
+                      Length: {getStatusLabel(validationResult.length?.status)}
+                    </span>
+                    <p>{validationResult.length?.message}</p>
+                    <small>
+                      {validationResult.length?.wordCount || 0} words, {validationResult.length?.charCount || 0} characters
+                    </small>
+                  </div>
+
+                  <div className="tet-validation-card">
+                    <span className={`tet-validation-pill is-${validationResult.validity?.status || "warn"}`}>
+                      Validity: {getStatusLabel(validationResult.validity?.status)}
+                    </span>
+                    <p>{validationResult.validity?.reason}</p>
+                  </div>
+
+                  <div className="tet-validation-card">
+                    <span className={`tet-validation-pill is-${validationResult.correctness?.status || "warn"}`}>
+                      Consistency: {getStatusLabel(validationResult.correctness?.status)}
+                    </span>
+                    <p>{validationResult.correctness?.reason}</p>
+                  </div>
+                </div>
+
+                {Array.isArray(validationResult.suggestions) && validationResult.suggestions.length > 0 && (
+                  <div className="tet-validation-suggestions">
+                    <strong>Suggestions</strong>
+                    <ul>
+                      {validationResult.suggestions.map((suggestion, index) => (
+                        <li key={`${suggestion}-${index}`}>{suggestion}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -916,6 +1100,15 @@ const TetrahedralLevel = () => {
       )}
 
       {/* XLSX Button */}
+      <button
+        className="tet-ai-button"
+        onClick={handleValidateFace}
+        title={selectedFaceIndex !== null ? "AI face check" : "Select a face first"}
+        disabled={selectedFaceIndex === null || validationLoading}
+      >
+        {validationLoading ? "..." : "AI"}
+      </button>
+
       <button className="xlsx-button" onClick={handleXLSXClick} title="Spreadsheet view">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="3" width="18" height="18"/>

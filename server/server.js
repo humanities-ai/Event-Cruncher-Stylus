@@ -744,6 +744,219 @@ app.post("/api/navigator-chat", upload.any(), async (req, res) => {
   }
 });
 
+const FACE_RULES = {
+  who: {
+    minWords: 1,
+    maxWords: 40,
+    hint: "Identify the person, group, or actor involved.",
+  },
+  what: {
+    minWords: 1,
+    maxWords: 50,
+    hint: "Describe the event, object, claim, or action.",
+  },
+  when: {
+    minWords: 1,
+    maxWords: 30,
+    hint: "State the time, date, period, or sequence.",
+  },
+  where: {
+    minWords: 1,
+    maxWords: 30,
+    hint: "State the place, setting, or location.",
+  },
+  why: {
+    minWords: 3,
+    maxWords: 90,
+    hint: "Explain the reason, purpose, or motivation.",
+  },
+  how: {
+    minWords: 3,
+    maxWords: 90,
+    hint: "Explain the method, process, or mechanism.",
+  },
+};
+
+function toWordCount(text = "") {
+  return (text.trim().match(/\S+/g) || []).length;
+}
+
+function getLengthStatus(wordCount, minWords, maxWords) {
+  if (wordCount === 0) {
+    return {
+      status: "fail",
+      message: "No text entered yet.",
+    };
+  }
+
+  if (wordCount < minWords) {
+    return {
+      status: "warn",
+      message: `Too short for this face. Aim for at least ${minWords} words.`,
+    };
+  }
+
+  if (wordCount > maxWords) {
+    return {
+      status: "warn",
+      message: `A bit long for this face. Aim for no more than ${maxWords} words.`,
+    };
+  }
+
+  return {
+    status: "pass",
+    message: `Length looks good for this face (${minWords}-${maxWords} words).`,
+  };
+}
+
+function parseJsonObject(text = "") {
+  const fenced = text.match(/```json\s*([\s\S]*?)```/i);
+  const candidate = fenced ? fenced[1] : text;
+  const start = candidate.indexOf("{");
+  const end = candidate.lastIndexOf("}");
+
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error("No JSON object found in model response.");
+  }
+
+  return JSON.parse(candidate.slice(start, end + 1));
+}
+
+app.post("/api/face-validation", async (req, res) => {
+  try {
+    const { selectedFace, faceTexts } = req.body || {};
+
+    if (!selectedFace || !FACE_RULES[selectedFace]) {
+      return res.status(400).json({ error: "A valid selectedFace is required." });
+    }
+
+    const normalizedFaces = Object.keys(FACE_RULES).reduce((acc, key) => {
+      acc[key] = typeof faceTexts?.[key] === "string" ? faceTexts[key].trim() : "";
+      return acc;
+    }, {});
+
+    const targetText = normalizedFaces[selectedFace];
+    const wordCount = toWordCount(targetText);
+    const charCount = targetText.length;
+    const rules = FACE_RULES[selectedFace];
+    const length = {
+      wordCount,
+      charCount,
+      minWords: rules.minWords,
+      maxWords: rules.maxWords,
+      ...getLengthStatus(wordCount, rules.minWords, rules.maxWords),
+    };
+
+    const fallback = {
+      face: selectedFace,
+      overallStatus: length.status === "pass" ? "needs_review" : "revise",
+      length,
+      validity: {
+        status: targetText ? "needs_review" : "fail",
+        reason: targetText
+          ? "LLM review unavailable. Length was checked, but semantic validity still needs a human or AI review."
+          : "Enter text before requesting validation.",
+      },
+      correctness: {
+        status: targetText ? "needs_review" : "fail",
+        reason: targetText
+          ? "LLM review unavailable. Basic heuristics cannot confirm correctness on their own."
+          : "Enter text before requesting validation.",
+      },
+      suggestions: targetText
+        ? [
+            `Make sure this answer directly addresses "${selectedFace}".`,
+            rules.hint,
+          ]
+        : [rules.hint],
+    };
+
+    if (!targetText) {
+      return res.json(fallback);
+    }
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.json(fallback);
+    }
+
+    const prompt = `
+You are validating one face of a 5W1H knowledge cube.
+
+Selected face: ${selectedFace}
+Face guidance: ${rules.hint}
+Recommended length: ${rules.minWords}-${rules.maxWords} words
+
+All face texts:
+${Object.entries(normalizedFaces)
+  .map(([key, value]) => `${key.toUpperCase()}: ${value || "[empty]"}`)
+  .join("\n")}
+
+Evaluate only the selected face, but use the other faces as context.
+
+Return JSON only with this exact shape:
+{
+  "overallStatus": "pass" | "warn" | "revise",
+  "validity": {
+    "status": "pass" | "warn" | "fail",
+    "reason": "short explanation"
+  },
+  "correctness": {
+    "status": "pass" | "warn" | "fail",
+    "reason": "short explanation"
+  },
+  "suggestions": ["short actionable suggestion", "optional second suggestion", "optional third suggestion"]
+}
+
+Scoring rules:
+- validity = does the text answer the selected 5W1H face in a meaningful, non-empty, plausible way
+- correctness = is it internally consistent and appropriate relative to the other face texts
+- use "warn" when uncertain or partially correct
+- use "fail" only when clearly wrong, empty, or mismatched
+- keep reasons concise
+`.trim();
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 500,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("Face validation API error:", errText);
+      return res.json(fallback);
+    }
+
+    const data = await response.json();
+    const llmText = (data.content || [])
+      .filter((block) => block.type === "text")
+      .map((block) => block.text)
+      .join("\n");
+
+    const parsed = parseJsonObject(llmText);
+
+    return res.json({
+      face: selectedFace,
+      overallStatus: parsed.overallStatus || fallback.overallStatus,
+      length,
+      validity: parsed.validity || fallback.validity,
+      correctness: parsed.correctness || fallback.correctness,
+      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions.slice(0, 3) : fallback.suggestions,
+    });
+  } catch (err) {
+    console.error("Face validation error:", err);
+    return res.status(500).json({ error: err.message || "Face validation failed." });
+  }
+});
+
 app.post('/api/anthropic', async (req, res) => {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
