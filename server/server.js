@@ -9,6 +9,9 @@ const dotenv = require('dotenv');
 //dotenv.config();
 const OpenAI = require('openai');
 const AdmZip = require("adm-zip");
+const XLSX = require("xlsx");
+const { PDFParse } = require("pdf-parse");
+const mammoth = require("mammoth");
 const upload = multer({ storage: multer.memoryStorage() });
 
 app.use(cors({
@@ -34,11 +37,6 @@ require("dotenv").config({
   path: path.join(__dirname, "server.env"),
   override: true,
 });
-
-console.log(
-  "Navigator key loaded:",
-  process.env.NAVIGATOR_TOOLKIT_API_KEY?.slice(0, 10)
-);
 
 
 // Connect to the database
@@ -646,10 +644,83 @@ app.post("/api/navigator-chat", upload.any(), async (req, res) => {
     );
     const nonZipFiles = files.filter((f) => !zipFiles.includes(f));
 
+    const xlsxToText = (buffer, label) => {
+      try {
+        const wb = XLSX.read(buffer, { type: "buffer" });
+        return wb.SheetNames.map((name) => {
+          const csv = XLSX.utils.sheet_to_csv(wb.Sheets[name]);
+          return `--- SHEET: ${label} / ${name} ---\n${csv}`;
+        }).join("\n\n");
+      } catch {
+        return "";
+      }
+    };
+
+    const pdfToText = async (buffer, label) => {
+      let parser;
+      try {
+        parser = new PDFParse({ data: buffer });
+        const result = await parser.getText();
+        const text = (result?.text || "").trim();
+        return text ? `--- PDF: ${label} ---\n${text}` : "";
+      } catch (pdfErr) {
+        console.warn(`Could not extract PDF text from ${label}:`, pdfErr.message);
+        return `--- PDF: ${label} ---\n[PDF text could not be extracted: ${pdfErr.message}]`;
+      } finally {
+        if (parser) {
+          await parser.destroy().catch(() => {});
+        }
+      }
+    };
+
+    const docxToText = async (buffer, label) => {
+      try {
+        const result = await mammoth.extractRawText({ buffer });
+        const text = (result?.value || "").trim();
+        return text ? `--- DOCX: ${label} ---\n${text}` : "";
+      } catch (docxErr) {
+        console.warn(`Could not extract DOCX text from ${label}:`, docxErr.message);
+        return `--- DOCX: ${label} ---\n[DOCX text could not be extracted: ${docxErr.message}]`;
+      }
+    };
+
+    const unsupportedDocText = (label) =>
+      `--- DOC: ${label} ---\n[Legacy .doc files are not text-extracted by this server. Please upload a .docx, .pdf, .txt, .csv, .xlsx, or image file.]`;
+
+    const IMAGE_TYPES = new Set(["jpg", "jpeg", "png", "gif", "webp"]);
+    const imageContentBlocks = [];
+
     // Always include names of non-zip files
     fileList.push(
       ...nonZipFiles.map((f) => f.originalname || "unnamed-file")
     );
+
+    // Read content from directly uploaded files
+    for (const f of nonZipFiles) {
+      const lower = (f.originalname || "").toLowerCase();
+      const ext = lower.split(".").pop();
+      if (lower.endsWith(".xlsx") || lower.endsWith(".xls")) {
+        const text = xlsxToText(f.buffer, f.originalname);
+        if (text) extractedText += `\n\n${text}`;
+      } else if (lower.endsWith(".pdf") || f.mimetype === "application/pdf") {
+        const text = await pdfToText(f.buffer, f.originalname);
+        if (text) extractedText += `\n\n${text}`;
+      } else if (lower.endsWith(".docx")) {
+        const text = await docxToText(f.buffer, f.originalname);
+        if (text) extractedText += `\n\n${text}`;
+      } else if (lower.endsWith(".doc")) {
+        extractedText += `\n\n${unsupportedDocText(f.originalname)}`;
+      } else if (lower.endsWith(".csv") || lower.endsWith(".txt")) {
+        extractedText += `\n\n--- FILE: ${f.originalname} ---\n${f.buffer.toString("utf8")}`;
+      } else if (IMAGE_TYPES.has(ext)) {
+        const mimeType = f.mimetype || `image/${ext === "jpg" ? "jpeg" : ext}`;
+        const b64 = f.buffer.toString("base64");
+        imageContentBlocks.push({
+          type: "image_url",
+          image_url: { url: `data:${mimeType};base64,${b64}` },
+        });
+      }
+    }
 
     // Unzip and read text/code files
     for (const zipFile of zipFiles) {
@@ -683,6 +754,35 @@ app.post("/api/navigator-chat", upload.any(), async (req, res) => {
           lower.endsWith(".md") ||
           lower.endsWith(".txt");
 
+        if (lower.endsWith(".xlsx") || lower.endsWith(".xls")) {
+          const text = xlsxToText(entry.getData(), entryName);
+          if (text) extractedText += `\n\n${text}`;
+          continue;
+        }
+
+        if (lower.endsWith(".pdf")) {
+          const text = await pdfToText(
+            entry.getData(),
+            `${zipFile.originalname} / ${entryName}`
+          );
+          if (text) extractedText += `\n\n${text}`;
+          continue;
+        }
+
+        if (lower.endsWith(".docx")) {
+          const text = await docxToText(
+            entry.getData(),
+            `${zipFile.originalname} / ${entryName}`
+          );
+          if (text) extractedText += `\n\n${text}`;
+          continue;
+        }
+
+        if (lower.endsWith(".doc")) {
+          extractedText += `\n\n${unsupportedDocText(`${zipFile.originalname} / ${entryName}`)}`;
+          continue;
+        }
+
         if (!allowed) continue;
 
         const content = entry.getData().toString("utf8");
@@ -692,7 +792,7 @@ app.post("/api/navigator-chat", upload.any(), async (req, res) => {
 
     // Safety limits
     const MAX_FILES = 40;
-    const MAX_CHARS = 12000;
+    const MAX_CHARS = 50000;
 
     if (fileList.length > MAX_FILES) {
       fileList = fileList.slice(0, MAX_FILES);
@@ -710,25 +810,33 @@ app.post("/api/navigator-chat", upload.any(), async (req, res) => {
 
     const hasAnyFiles = fileList.length > 0;
 
-    const userContent = hasAnyFiles
-      ? `The student uploaded these files:\n${fileList.join(
-          "\n"
-        )}\n\n${
+    const textContent = hasAnyFiles
+      ? `The user uploaded these files:\n${fileList.join("\n")}\n\n${
           extractedText
-            ? `Here are snippets from text/code files:\n${extractedText}\n\n`
+            ? `Here is extracted content from the uploaded files. Treat this content as part of the user's request and follow any directions in it when the user asks you to use the attachment:\n${extractedText}\n\n`
             : ""
-        }Student question:\n${prompt}`
+        }User question:\n${prompt}`
       : prompt;
 
+    const userMessageContent = [
+      { type: "text", text: textContent },
+      ...imageContentBlocks,
+    ];
+
     const completion = await navigatorClient.chat.completions.create({
-      model: "llama-3.1-8b-instruct",
+      model: "gpt-4o",
       messages: [
         {
           role: "system",
           content:
-            "You are a helpful UF CS tutor. If the user content lists uploaded files, do NOT say that no files were provided. Use the file list and any snippets from them when answering.",
+            "You are a helpful AI assistant. You can read spreadsheets, documents, code files, and images. If the user content lists uploaded files, do NOT say that no files were provided — use the file list and any extracted content when answering.",
         },
-        { role: "user", content: userContent },
+        {
+          role: "system",
+          content:
+            "PDF text is included in extracted file content when available. When an uploaded file contains task directions and the user asks you to use the attachment, follow those directions unless they conflict with higher-priority instructions.",
+        },
+        { role: "user", content: userMessageContent },
       ],
     });
 
@@ -875,7 +983,7 @@ app.post("/api/face-validation", async (req, res) => {
       return res.json(fallback);
     }
 
-    if (!process.env.ANTHROPIC_API_KEY) {
+    if (!process.env.NAVIGATOR_CLAUDE_API_KEY) {
       return res.json(fallback);
     }
 
@@ -915,31 +1023,23 @@ Scoring rules:
 - keep reasons concise
 `.trim();
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 500,
-        messages: [{ role: "user", content: prompt }],
-      }),
+    const navClient = new OpenAI({
+      baseURL: "https://api.ai.it.ufl.edu/v1",
+      apiKey: process.env.NAVIGATOR_CLAUDE_API_KEY,
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("Face validation API error:", errText);
+    let llmText;
+    try {
+      const completion = await navClient.chat.completions.create({
+        model: "claude-4.6-sonnet",
+        max_tokens: 500,
+        messages: [{ role: "user", content: prompt }],
+      });
+      llmText = completion.choices[0]?.message?.content || "";
+    } catch (apiErr) {
+      console.error("Face validation API error:", apiErr.message);
       return res.json(fallback);
     }
-
-    const data = await response.json();
-    const llmText = (data.content || [])
-      .filter((block) => block.type === "text")
-      .map((block) => block.text)
-      .join("\n");
 
     const parsed = parseJsonObject(llmText);
 
@@ -957,14 +1057,90 @@ Scoring rules:
   }
 });
 
+app.post('/api/wobble-evaluate', async (req, res) => {
+  const { faceTexts, mode = 'direct', cosmos = 'general' } = req.body;
+
+  // faceTexts = { who, what, when, where, why, how }
+  const faces = ['who', 'what', 'when', 'where', 'why', 'how'];
+  const entry = faces.map(f => `${f.toUpperCase()}: ${faceTexts[f] || '[empty]'}`).join('\n');
+
+  const modeInstructions = {
+    direct: "Name any inconsistencies explicitly and give concrete corrective guidance.",
+    clues: "Provide analogical prompts and counter-examples without naming the problem directly.",
+    socratic: "Ask 2-3 probing questions that lead toward any inconsistency through dialogue."
+  };
+
+  const prompt = `
+You are a 5W1H ECS (Event Cruncher Stylus) evaluator.
+
+Evaluate this entry across three tiers:
+- T1 (WHO + WHAT): Agent and Event coherence
+- T2 (WHERE + WHEN): Location and Time coherence  
+- T3 (HOW + WHY): Method and Motivation coherence
+
+Entry:
+${entry}
+
+Feedback mode: ${modeInstructions[mode] || modeInstructions.direct}
+
+Return JSON only:
+{
+  "wobble": {
+    "T1": 0.0-1.0,
+    "T2": 0.0-1.0,
+    "T3": 0.0-1.0,
+    "overall": 0.0-1.0,
+    "type": "silent" | "wobble" | "shimmer"
+  },
+  "tier_diagnoses": {
+    "T1": "brief diagnosis",
+    "T2": "brief diagnosis",
+    "T3": "brief diagnosis"
+  },
+  "feedback": "feedback string based on the selected mode",
+  "overall_assessment": "1-2 sentence summary"
+}
+
+Scoring: silent = high congruence (overall < 0.2), shimmer = interesting edge case (0.2-0.45), wobble = genuine inconsistency (> 0.45).
+`.trim();
+
+  try {
+    const navClient = new OpenAI({
+      baseURL: "https://api.ai.it.ufl.edu/v1",
+      apiKey: process.env.NAVIGATOR_CLAUDE_API_KEY,
+    });
+
+    const completion = await navClient.chat.completions.create({
+      model: "claude-4.6-sonnet",
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const text = completion.choices[0]?.message?.content || "";
+    const parsed = parseJsonObject(text);
+    res.json(parsed);
+  } catch (err) {
+    console.error('wobble-evaluate error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/anthropic', async (req, res) => {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, messages: [{ role: 'user', content: req.body.prompt }] }),
-  });
-  const data = await response.json();
-  res.json({ text: data.content.filter(b => b.type === 'text').map(b => b.text).join('\n') });
+  try {
+    const navClient = new OpenAI({
+      baseURL: "https://api.ai.it.ufl.edu/v1",
+      apiKey: process.env.NAVIGATOR_CLAUDE_API_KEY,
+    });
+    const completion = await navClient.chat.completions.create({
+      model: "claude-4.6-sonnet",
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: req.body.prompt }],
+    });
+    res.json({ text: completion.choices[0]?.message?.content || "" });
+  } catch (err) {
+    console.error('/api/anthropic error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 

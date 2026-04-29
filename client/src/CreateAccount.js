@@ -65,7 +65,7 @@ function CreateAccount() {
         // Save new user's ID so CubicLevel loads THEIR cube, not admin's
         localStorage.setItem("loggedInUserId", String(data.userId));
 
-        navigate('/root');
+        navigate('/levels/cosmos');
       }
       else {
         const err = await resp.json();

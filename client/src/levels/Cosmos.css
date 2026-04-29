@@ -357,6 +357,37 @@ html, body {
   cursor: not-allowed;
 }
 
+/* ─── WOBBLE MODE BUTTONS ─────────────────────────────────────────────────── */
+.tet-mode-btn {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border: 1.5px solid #dde3ee !important;
+  border-radius: 999px !important;
+  padding: 5px 16px !important;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.tet-mode-btn:hover:not(:disabled) {
+  background: #f1f5f9 !important;
+  border-color: #b0bdd0 !important;
+}
+
+.tet-mode-btn--active {
+  background: #000000 !important;
+  color: #ffffff !important;
+  border-color: #000000 !important;
+}
+
+.tet-mode-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+
 .textarea-bullet-btn {
   position: absolute;
   top: 8px;

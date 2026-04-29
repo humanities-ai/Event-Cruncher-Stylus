@@ -7,6 +7,7 @@ import LandingPage from './LandingPage';
 import Root from './Root';
 import BinaryLevel from './levels/BinaryLevel';
 import TetrahedralLevel from './levels/TetrahedralLevel';
+import Cosmos from './levels/Cosmos';
 import CubicLevel from './levels/CubicLevel';
 import Navigator from './levels/Navigator';
 import './App.css';
@@ -46,6 +47,7 @@ function App() {
           <Route path="/root" element={<Root />} />
           <Route path="/levels/BinaryLevel" element={<BinaryLevel />} />
           <Route path="/levels/TetrahedralLevel" element={<TetrahedralLevel />} />
+          <Route path="/levels/cosmos" element={<Cosmos />} />
           <Route path="/levels/CubicLevel" element={<CubicLevel />} />
           <Route path="/levels/Navigator" element={<Navigator />} />
           {/* End Routes */}

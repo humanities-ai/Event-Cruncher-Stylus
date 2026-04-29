@@ -6,7 +6,7 @@ import { Link } from "react-router-dom";
 import logo from "../ECS_logo6.png";
 import "../LandingPage.css";
 import * as THREE from "three";
-import "./TetrahedralLevel.css";
+import "./Cosmos.css";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 
@@ -126,7 +126,7 @@ const FACE_XFORMS = [
 ];
 
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
-const TetrahedralLevel = () => {
+const Cosmos = () => {
   const { t } = useTranslation();
 
   const containerRef = useRef(null);
@@ -180,11 +180,44 @@ const TetrahedralLevel = () => {
   const [hoveredQuadrant, setHoveredQuadrant] = useState(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
 
+  const [wobbleResult, setWobbleResult] = useState(null);
+  const [wobbleLoading, setWobbleLoading] = useState(false);
+  const [wobbleMode, setWobbleMode] = useState('direct'); // 'direct' | 'clues' | 'socratic'
+  const [isWobbleModalOpen, setIsWobbleModalOpen] = useState(false);
+
   const faceTextsRef = useRef({});
   useEffect(() => { faceTextsRef.current = faceTexts; }, [faceTexts]);
 
   const buttonRowRef = useRef(null);
   const trashRef = useRef(null);
+
+  const handleWobbleEvaluate = async (modeOverride) => {
+    const activeMode = typeof modeOverride === 'string' ? modeOverride : wobbleMode;
+    setWobbleLoading(true);
+    setIsWobbleModalOpen(true);
+    setWobbleResult(null);
+
+    const allFaceTexts = faceKeys.reduce((acc, key, i) => {
+      acc[key] = (faceTexts[i] || '').trim();
+      return acc;
+    }, {});
+
+    try {
+      const response = await fetch('http://localhost:4000/api/wobble-evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ faceTexts: allFaceTexts, mode: activeMode })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Server error');
+      setWobbleResult(data);
+    } catch (err) {
+      console.error('Wobble evaluation failed:', err);
+      setWobbleResult({ _error: err.message });
+    } finally {
+      setWobbleLoading(false);
+    }
+  };
 
 
   useEffect(() => {
@@ -285,7 +318,7 @@ const TetrahedralLevel = () => {
 
   const toggleDITextBox = () => setIsDITextBoxVisible((v) => !v);
   useEffect(() => { setIsDITextBoxVisible(true); }, []);
-  
+
   useEffect(() => {
     if (selectedFaceIndex !== null) {
       setTempFaceFiles((prev) => ({
@@ -1203,14 +1236,82 @@ const TetrahedralLevel = () => {
         </div>
       )}
 
-      {/* XLSX Button */}
+      {/* Wobble Modal */}
+      {isWobbleModalOpen && (
+        <div className="tet-validation-modal-overlay">
+          <div className="tet-validation-modal">
+            <button className="close-button" onClick={() => setIsWobbleModalOpen(false)}>X</button>
+            <h3>5W1H Consistency Evaluation</h3>
+
+            {/* Mode selector */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', marginTop: '10px', justifyContent: 'center' }}>
+              {['direct', 'clues', 'socratic'].map((m) => (
+                <button
+                  key={m}
+                  className={`tet-mode-btn${wobbleMode === m ? ' tet-mode-btn--active' : ''}`}
+                  disabled={wobbleLoading}
+                  onClick={() => { setWobbleMode(m); handleWobbleEvaluate(m); }}
+                >
+                  {m.charAt(0).toUpperCase() + m.slice(1)}
+                </button>
+              ))}
+            </div>
+
+            {wobbleLoading && <div>Evaluating all faces...</div>}
+
+            {wobbleResult?._error && (
+              <div className="tet-validation-error">{wobbleResult._error}</div>
+            )}
+
+            {wobbleResult && !wobbleResult._error && (
+              <div>
+                {/* Wobble type badge */}
+                <div className={`tet-validation-badge is-${
+                  wobbleResult.wobble?.type === 'silent' ? 'pass' :
+                  wobbleResult.wobble?.type === 'shimmer' ? 'warn' : 'fail'
+                }`}>
+                  {wobbleResult.wobble?.type === 'silent' ? '✦ SILENT' :
+                   wobbleResult.wobble?.type === 'shimmer' ? '◈ SHIMMER' : '⟁ WOBBLE'}
+                  {' — '}{Math.round((wobbleResult.wobble?.overall || 0) * 100)}% tension
+                </div>
+
+                {/* Tier bars */}
+                <div className="tet-validation-grid">
+                  {['T1', 'T2', 'T3'].map(tier => (
+                    <div key={tier} className="tet-validation-card">
+                      <strong>{tier} ({tier === 'T1' ? 'WHO/WHAT' : tier === 'T2' ? 'WHERE/WHEN' : 'HOW/WHY'})</strong>
+                      <div style={{ background: '#eee', borderRadius: 4, height: 8, margin: '6px 0' }}>
+                        <div style={{
+                          width: `${(wobbleResult.wobble?.[tier] || 0) * 100}%`,
+                          background: (wobbleResult.wobble?.[tier] || 0) > 0.45 ? '#c0392b' : '#f39c12',
+                          height: '100%', borderRadius: 4
+                        }} />
+                      </div>
+                      <p>{wobbleResult.tier_diagnoses?.[tier]}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Feedback */}
+                <div className="tet-validation-suggestions">
+                  <strong>Feedback ({wobbleMode})</strong>
+                  <p>{wobbleResult.feedback}</p>
+                </div>
+                <p><em>{wobbleResult.overall_assessment}</em></p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* AI Button — runs wobble evaluation */}
       <button
         className="tet-ai-button"
-        onClick={handleValidateFace}
-        title={selectedFaceIndex !== null ? "AI face check" : "Select a face first"}
-        disabled={selectedFaceIndex === null || validationLoading}
+        onClick={handleWobbleEvaluate}
+        disabled={wobbleLoading}
+        title="Evaluate full entry consistency"
       >
-        {validationLoading ? "..." : "AI"}
+        {wobbleLoading ? "..." : "AI"}
       </button>
 
       <button className="xlsx-button" onClick={handleXLSXClick} title="Spreadsheet view">
@@ -1292,4 +1393,4 @@ const TetrahedralLevel = () => {
   );
 };
 
-export default TetrahedralLevel;
+export default Cosmos;

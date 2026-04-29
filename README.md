@@ -66,6 +66,18 @@ npm install adm-zip
 npm install three
 ```
 
+```shell
+npm install react-markdown
+```
+
+```shell
+npm install pdf-parse
+```
+
+```shell
+npm install mammoth
+```
+
 # How-To Run the Application
 ## Frontend: 'client'
 
@@ -85,6 +97,12 @@ cd server
 ```
 ```shell
 npm run dev
+```
+
+OR
+
+```shell
+node server.js
 ```
 
 ## MySQL Commands
