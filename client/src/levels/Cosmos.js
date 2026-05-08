@@ -13,6 +13,136 @@ import i18n from "../i18n";
 // ─── TEXTURE CACHE ────────────────────────────────────────────────────────────
 const _texCache = new Map();
 
+function renderMarkdown(text = "") {
+  const normalized = text.replace(/(\*\*[^*]+\*\*):\s*/g, '$1 ');
+  const lines = normalized.split("\n");
+  return lines.map((line, li) => {
+    const cleaned = line.replace(/^:\s*/, "");
+    const isNumberLine = /^\d+\.?\s*$/.test(cleaned.trim());
+    const br = li < lines.length - 1 ? <br /> : null;
+
+    if (isNumberLine) {
+      return <span key={li}><strong>{cleaned.trim()}</strong>{br}</span>;
+    }
+
+    const parts = [];
+    const re = /(\*\*(.+?)\*\*|\*(.+?)\*)/g;
+    let last = 0, m;
+    while ((m = re.exec(cleaned)) !== null) {
+      if (m.index > last) parts.push(cleaned.slice(last, m.index));
+      if (m[2] !== undefined) parts.push(<strong key={m.index}>{m[2]}</strong>);
+      else parts.push(<em key={m.index}>{m[3]}</em>);
+      last = m.index + m[0].length;
+    }
+    if (last < cleaned.length) parts.push(cleaned.slice(last));
+    return <span key={li}>{parts}{br}</span>;
+  });
+}
+
+function MiniOctahedron({ wobbleType }) {
+  const mountRef = useRef(null);
+
+  useEffect(() => {
+    const el = mountRef.current;
+    if (!el) return;
+
+    const w = el.clientWidth || 200;
+    const h = el.clientHeight || 110;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
+    camera.position.z = 5;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setClearColor(0x000000, 0);
+    el.appendChild(renderer.domElement);
+
+    const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambient);
+    const dir = new THREE.DirectionalLight(0x4488cc, 1.2);
+    dir.position.set(1, 2, 3);
+    scene.add(dir);
+
+    const octGeo = new THREE.OctahedronGeometry(1.2, 0);
+    const nonIndexed = octGeo.toNonIndexed();
+    const faceCount = nonIndexed.attributes.position.count / 3;
+    for (let i = 0; i < faceCount; i++) nonIndexed.addGroup(i * 3, 3, i % 2);
+    const faceMats = [0, 1].map((j) =>
+      new THREE.MeshPhongMaterial({
+        color:       j === 0 ? 0x0d2a5e : 0x112f6a,
+        emissive:    j === 0 ? 0x081428 : 0x0a1830,
+        specular:    0x4488cc,
+        shininess:   80,
+        transparent: true,
+        opacity:     j === 0 ? 0.38 : 0.30,
+        side:        THREE.DoubleSide,
+        depthWrite:  false,
+      })
+    );
+    const octMesh = new THREE.Mesh(nonIndexed, faceMats);
+
+    const edgeGeo = new THREE.EdgesGeometry(octGeo);
+    const wire = new THREE.LineSegments(
+      edgeGeo,
+      new THREE.LineBasicMaterial({ color: 0x5599ee, transparent: true, opacity: 1.0 })
+    );
+    const halo = new THREE.LineSegments(
+      edgeGeo.clone(),
+      new THREE.LineBasicMaterial({ color: 0x2255bb, transparent: true, opacity: 0.28 })
+    );
+    halo.scale.setScalar(1.012);
+
+    const group = new THREE.Group();
+    group.add(octMesh, wire, halo);
+    group.rotation.x = 0.35;
+    group.rotation.y = 0.5;
+    scene.add(group);
+
+    let frameId;
+    let t = 0;
+    let fallY = 0;
+    let fallVY = 0;
+
+    const animate = () => {
+      frameId = requestAnimationFrame(animate);
+      t += 0.016;
+
+      if (wobbleType === 'silent') {
+        group.rotation.y += 0.008;
+        group.rotation.x = 0.35 + Math.sin(t * 0.4) * 0.05;
+        group.rotation.z = 0;
+        group.position.y = 0;
+      } else if (wobbleType === 'shimmer') {
+        group.rotation.y += 0.014;
+        group.rotation.x = 0.35 + Math.sin(t * 1.6) * 0.28;
+        group.rotation.z = Math.sin(t * 1.1) * 0.18;
+        group.position.y = Math.sin(t * 1.3) * 0.12;
+      } else {
+        group.rotation.y += 0.038 + Math.sin(t * 3.1) * 0.03;
+        group.rotation.x += 0.022 + Math.cos(t * 2.4) * 0.02;
+        group.rotation.z += Math.sin(t * 4.2) * 0.016;
+        fallVY -= 0.005;
+        fallY += fallVY;
+        if (fallY < -0.65) { fallY = -0.65; fallVY = Math.abs(fallVY) * 0.55; }
+        group.position.y = fallY;
+      }
+
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    return () => {
+      cancelAnimationFrame(frameId);
+      renderer.dispose();
+      if (el.contains(renderer.domElement)) el.removeChild(renderer.domElement);
+    };
+  }, [wobbleType]);
+
+  return <div ref={mountRef} style={{ width: '100%', height: '110px' }} />;
+}
+
 function InstructionsPanel({ text }) {
   const lines = text.split("\n");
   const bulletLines = [];
@@ -182,8 +312,13 @@ const Cosmos = () => {
 
   const [wobbleResult, setWobbleResult] = useState(null);
   const [wobbleLoading, setWobbleLoading] = useState(false);
-  const [wobbleMode, setWobbleMode] = useState('direct'); // 'direct' | 'clues' | 'socratic'
+  const [wobbleMode, setWobbleMode] = useState('direct');
+  const [wobbleDomain, setWobbleDomain] = useState('general');
   const [isWobbleModalOpen, setIsWobbleModalOpen] = useState(false);
+
+  const [simulateResult, setSimulateResult] = useState(null);
+  const [simulateLoading, setSimulateLoading] = useState(false);
+  const [isSimulateModalOpen, setIsSimulateModalOpen] = useState(false);
 
   const faceTextsRef = useRef({});
   useEffect(() => { faceTextsRef.current = faceTexts; }, [faceTexts]);
@@ -191,8 +326,9 @@ const Cosmos = () => {
   const buttonRowRef = useRef(null);
   const trashRef = useRef(null);
 
-  const handleWobbleEvaluate = async (modeOverride) => {
+  const handleWobbleEvaluate = async (modeOverride, domainOverride) => {
     const activeMode = typeof modeOverride === 'string' ? modeOverride : wobbleMode;
+    const activeDomain = typeof domainOverride === 'string' ? domainOverride : wobbleDomain;
     setWobbleLoading(true);
     setIsWobbleModalOpen(true);
     setWobbleResult(null);
@@ -206,7 +342,7 @@ const Cosmos = () => {
       const response = await fetch('http://localhost:4000/api/wobble-evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ faceTexts: allFaceTexts, mode: activeMode })
+        body: JSON.stringify({ faceTexts: allFaceTexts, mode: activeMode, cosmos: activeDomain })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Server error');
@@ -219,6 +355,32 @@ const Cosmos = () => {
     }
   };
 
+  const handleSimulate = async () => {
+    setSimulateLoading(true);
+    setIsSimulateModalOpen(true);
+    setSimulateResult(null);
+
+    const allFaceTexts = faceKeys.reduce((acc, key, i) => {
+      acc[key] = (faceTexts[i] || '').trim();
+      return acc;
+    }, {});
+
+    try {
+      const response = await fetch('http://localhost:4000/api/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ faceTexts: allFaceTexts }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Server error');
+      setSimulateResult(data);
+    } catch (err) {
+      console.error('Simulate failed:', err);
+      setSimulateResult({ _error: err.message });
+    } finally {
+      setSimulateLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (selectedFaceIndex !== null && faceTexts[selectedFaceIndex] !== undefined) {
@@ -1244,7 +1406,7 @@ const Cosmos = () => {
             <h3>5W1H Consistency Evaluation</h3>
 
             {/* Mode selector */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', marginTop: '10px', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', marginTop: '10px', justifyContent: 'center' }}>
               {['direct', 'clues', 'socratic'].map((m) => (
                 <button
                   key={m}
@@ -1255,6 +1417,35 @@ const Cosmos = () => {
                   {m.charAt(0).toUpperCase() + m.slice(1)}
                 </button>
               ))}
+            </div>
+
+            {/* Domain selector */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '14px' }}>
+              <label style={{ fontSize: '0.82em', color: '#4b5563', fontWeight: 600 }}>Domain</label>
+              <select
+                value={wobbleDomain}
+                disabled={wobbleLoading}
+                onChange={(e) => { setWobbleDomain(e.target.value); handleWobbleEvaluate(wobbleMode, e.target.value); }}
+                style={{
+                  fontSize: '0.82em',
+                  border: '1.5px solid #dde3ee',
+                  borderRadius: '999px',
+                  padding: '3px 10px',
+                  background: '#fff',
+                  cursor: 'pointer',
+                  outline: 'none',
+                }}
+              >
+                {[
+                  { value: 'general',      label: 'General' },
+                  { value: 'legal',        label: 'Legal' },
+                  { value: 'medical',      label: 'Medical' },
+                  { value: 'scientific',   label: 'Scientific' },
+                  { value: 'journalistic', label: 'Journalistic' },
+                ].map((d) => (
+                  <option key={d.value} value={d.value}>{d.label}</option>
+                ))}
+              </select>
             </div>
 
             {wobbleLoading && <div>Evaluating all faces...</div>}
@@ -1283,7 +1474,7 @@ const Cosmos = () => {
                       <div style={{ background: '#eee', borderRadius: 4, height: 8, margin: '6px 0' }}>
                         <div style={{
                           width: `${(wobbleResult.wobble?.[tier] || 0) * 100}%`,
-                          background: (wobbleResult.wobble?.[tier] || 0) > 0.45 ? '#c0392b' : '#f39c12',
+                          background: (wobbleResult.wobble?.[tier] || 0) >= 0.9 ? '#27ae60' : (wobbleResult.wobble?.[tier] || 0) >= 0.5 ? '#f39c12' : '#c0392b',
                           height: '100%', borderRadius: 4
                         }} />
                       </div>
@@ -1292,12 +1483,84 @@ const Cosmos = () => {
                   ))}
                 </div>
 
+
                 {/* Feedback */}
                 <div className="tet-validation-suggestions">
                   <strong>Feedback ({wobbleMode})</strong>
-                  <p>{wobbleResult.feedback}</p>
+                  <p>{renderMarkdown(wobbleResult.feedback)}</p>
                 </div>
-                <p><em>{wobbleResult.overall_assessment}</em></p>
+                <p><em>{renderMarkdown(wobbleResult.overall_assessment)}</em></p>
+
+                {/* Mini octahedron */}
+                <MiniOctahedron wobbleType={wobbleResult.wobble?.type || 'silent'} />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Simulate Modal */}
+      {isSimulateModalOpen && (
+        <div className="tet-validation-modal-overlay">
+          <div className="tet-validation-modal">
+            <button className="close-button" onClick={() => setIsSimulateModalOpen(false)}>X</button>
+            <h3>5W1H Simulation</h3>
+
+            {simulateLoading && (
+              <div className="tet-validation-loading">Generating simulation…</div>
+            )}
+
+            {simulateResult?._error && (
+              <div className="tet-validation-error">{simulateResult._error}</div>
+            )}
+
+            {simulateResult && !simulateResult._error && (
+              <div>
+                {/* Scenario */}
+                <div style={{ marginBottom: '16px' }}>
+                  <div className="tet-validation-badge" style={{ background: '#e8f0fe', color: '#1a3a6b', marginBottom: '10px', fontSize: '0.88rem' }}>
+                    ◎ SCENARIO
+                  </div>
+                  <div className="tet-validation-card">
+                    <p style={{ margin: 0, lineHeight: 1.6 }}>{simulateResult.scenario}</p>
+                  </div>
+                </div>
+
+                {/* Gaps */}
+                {simulateResult.gaps?.length > 0 && (
+                  <div style={{ marginBottom: '16px' }}>
+                    <div className="tet-validation-badge" style={{ background: '#fef3c7', color: '#78350f', marginBottom: '10px', fontSize: '0.88rem' }}>
+                      ⚠ GAPS
+                    </div>
+                    <div className="tet-validation-grid">
+                      {simulateResult.gaps.map((g, i) => (
+                        <div key={i} className="tet-validation-card">
+                          <strong style={{ fontSize: '0.82em', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#000000' }}>
+                            {g.face}
+                          </strong>
+                          <p>{g.issue}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Variations */}
+                {simulateResult.variations?.length > 0 && (
+                  <div>
+                    <div className="tet-validation-badge" style={{ background: '#f0fdf4', color: '#14532d', marginBottom: '10px', fontSize: '0.88rem' }}>
+                      ⟳ VARIATIONS
+                    </div>
+                    <div className="tet-validation-grid">
+                      {simulateResult.variations.map((v, i) => (
+                        <div key={i} className="tet-validation-card">
+                          <strong style={{ fontSize: '0.92em' }}>{v.label}</strong>
+                          <p>{v.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1310,8 +1573,20 @@ const Cosmos = () => {
         onClick={handleWobbleEvaluate}
         disabled={wobbleLoading}
         title="Evaluate full entry consistency"
+        style={{ width: '52px' }}
       >
-        {wobbleLoading ? "..." : "AI"}
+        {wobbleLoading ? "..." : "EVAL"}
+      </button>
+
+      {/* Simulate Button */}
+      <button
+        className="tet-ai-button"
+        onClick={handleSimulate}
+        disabled={simulateLoading}
+        title="Generate a scenario simulation from your cube"
+        style={{ right: '196px', width: '52px' }}
+      >
+        {simulateLoading ? "..." : "SIM"}
       </button>
 
       <button className="xlsx-button" onClick={handleXLSXClick} title="Spreadsheet view">

@@ -14,7 +14,7 @@
   "back_t": "Back",
 
   "cubic_level_title": "Cubic Level",
-  "cubic_level_instructions": "WELCOME! \n\nHere’s how to interact with the object:\n   • Spin the object by clicking and dragging.\n   • Click on a face to open the corresponding text box.\n   • Use the \"Insert Files\" button to add files.\n   • Click \"Save\" to save your changes.\n   • Click the \"AI\" button to view a 5W1H Consistency Evaluation.\n   • Click the \"XLSX\" grid button in the bottom right corner to view your data in a spreadsheet format.\n   • Click the \"Download\" button in the bottom right corner to download the data and uploaded files.",
+  "cubic_level_instructions": "WELCOME! \n\nHere’s how to interact with the object:\n   • Spin the object by clicking and dragging.\n   • Click on a face to open the corresponding text box.\n   • Use the \"Insert Files\" button to add files.\n   • Click \"Save\" to save your changes.\n   • Click the \"EVAL\" button to view a 5W1H Consistency Evaluation.\n   • Click the \"SIM\" button to create a simulated scenario with your data.\n   • Click the \"XLSX\" grid button in the bottom right corner to view your data in a spreadsheet format.\n   • Click the \"Download\" button in the bottom right corner to download the data and uploaded files.",
   "criteria_instructions_t": "Criteria Instructions: ",
   
   "cube_faces": {

@@ -852,6 +852,54 @@ app.post("/api/navigator-chat", upload.any(), async (req, res) => {
   }
 });
 
+const COSMOS_DOMAINS = {
+  general: {
+    label: "General",
+    evalContext: "This is a general 5W1H knowledge cube. Evaluate it for internal logical consistency across all dimensions.",
+    keyQuestions: {
+      T1: "Do the agent (WHO) and event (WHAT) logically belong together?",
+      T2: "Are the location (WHERE) and time (WHEN) plausible and mutually consistent?",
+      T3: "Does the method (HOW) plausibly achieve the stated motivation (WHY)?",
+    },
+  },
+  legal: {
+    label: "Legal",
+    evalContext: "This cube describes a legal scenario. WHO is a party, defendant, plaintiff, or counsel. WHAT is a legal action, claim, or ruling. WHEN involves statutes of limitations and procedural deadlines. WHERE establishes jurisdiction. WHY is the cause of action or legal basis. HOW is the procedural or evidentiary mechanism.",
+    keyQuestions: {
+      T1: "Are the parties (WHO) legally capable of the action described (WHAT) — e.g. standing, capacity?",
+      T2: "Is the jurisdiction (WHERE) proper and is the timeline (WHEN) within applicable limitation periods?",
+      T3: "Does the procedure or evidence (HOW) satisfy the legal standard required by the cause of action (WHY)?",
+    },
+  },
+  medical: {
+    label: "Medical",
+    evalContext: "This cube describes a clinical or medical scenario. WHO is a patient, clinician, or institution. WHAT is a diagnosis, treatment, or procedure. WHEN involves clinical timing and urgency. WHERE is the care setting. WHY is the clinical indication or contraindication. HOW is the treatment mechanism or protocol.",
+    keyQuestions: {
+      T1: "Is the patient profile (WHO) consistent with the diagnosis or procedure (WHAT)?",
+      T2: "Is the care setting (WHERE) appropriate and is the timing (WHEN) clinically sound?",
+      T3: "Does the treatment mechanism (HOW) address the clinical indication (WHY) without contraindication?",
+    },
+  },
+  scientific: {
+    label: "Scientific",
+    evalContext: "This cube describes a scientific research scenario. WHO is a researcher, team, or institution. WHAT is the experiment, finding, or hypothesis. WHEN is the research timeline or publication period. WHERE is the lab, field site, or data source. WHY is the research question or theoretical motivation. HOW is the methodology or experimental design.",
+    keyQuestions: {
+      T1: "Does the research group (WHO) have the domain expertise required for the described finding (WHAT)?",
+      T2: "Is the research site or data source (WHERE) and timeline (WHEN) realistic for this scope of study?",
+      T3: "Does the methodology (HOW) appropriately operationalize and test the research question (WHY)?",
+    },
+  },
+  journalistic: {
+    label: "Journalistic",
+    evalContext: "This cube describes a journalistic or news scenario. WHO is a source, subject, journalist, or news organization. WHAT is the news event, story, or claim. WHEN is the newsworthy moment or publication date. WHERE is the scene of the event or dateline. WHY is the newsworthiness angle or editorial motivation. HOW is the reporting method or evidentiary basis.",
+    keyQuestions: {
+      T1: "Are the people involved (WHO) credibly connected to the reported event (WHAT)?",
+      T2: "Is the location (WHERE) and timing (WHEN) internally consistent with reported facts?",
+      T3: "Does the reporting method or sourcing (HOW) support the stated editorial angle (WHY)?",
+    },
+  },
+};
+
 const FACE_RULES = {
   who: {
     minWords: 1,
@@ -1060,23 +1108,26 @@ Scoring rules:
 app.post('/api/wobble-evaluate', async (req, res) => {
   const { faceTexts, mode = 'direct', cosmos = 'general' } = req.body;
 
-  // faceTexts = { who, what, when, where, why, how }
   const faces = ['who', 'what', 'when', 'where', 'why', 'how'];
   const entry = faces.map(f => `${f.toUpperCase()}: ${faceTexts[f] || '[empty]'}`).join('\n');
+
+  const domain = COSMOS_DOMAINS[cosmos] || COSMOS_DOMAINS.general;
 
   const modeInstructions = {
     direct: "Name any inconsistencies explicitly and give concrete corrective guidance.",
     clues: "Provide analogical prompts and counter-examples without naming the problem directly.",
-    socratic: "Ask 2-3 probing questions that lead toward any inconsistency through dialogue."
+    socratic: "Ask 2-3 probing questions that lead toward any inconsistency through dialogue.",
   };
 
   const prompt = `
-You are a 5W1H ECS (Event Cruncher Stylus) evaluator.
+You are a 5W1H ECS (Event Cruncher Stylus) evaluator specializing in the ${domain.label} domain.
 
-Evaluate this entry across three tiers:
-- T1 (WHO + WHAT): Agent and Event coherence
-- T2 (WHERE + WHEN): Location and Time coherence  
-- T3 (HOW + WHY): Method and Motivation coherence
+Domain context: ${domain.evalContext}
+
+Evaluate this entry across three tiers using these domain-specific diagnostic questions:
+- T1 (WHO + WHAT): ${domain.keyQuestions.T1}
+- T2 (WHERE + WHEN): ${domain.keyQuestions.T2}
+- T3 (HOW + WHY): ${domain.keyQuestions.T3}
 
 Entry:
 ${entry}
@@ -1093,15 +1144,15 @@ Return JSON only:
     "type": "silent" | "wobble" | "shimmer"
   },
   "tier_diagnoses": {
-    "T1": "brief diagnosis",
-    "T2": "brief diagnosis",
-    "T3": "brief diagnosis"
+    "T1": "brief domain-aware diagnosis",
+    "T2": "brief domain-aware diagnosis",
+    "T3": "brief domain-aware diagnosis"
   },
-  "feedback": "feedback string based on the selected mode",
+  "feedback": "feedback string in the selected mode, informed by the ${domain.label} domain",
   "overall_assessment": "1-2 sentence summary"
 }
 
-Scoring: silent = high congruence (overall < 0.2), shimmer = interesting edge case (0.2-0.45), wobble = genuine inconsistency (> 0.45).
+Scoring: silent = high congruence (overall < 0.2), shimmer = interesting or ambiguous edge case (0.2-0.45), wobble = genuine inconsistency (> 0.45).
 `.trim();
 
   try {
@@ -1118,9 +1169,75 @@ Scoring: silent = high congruence (overall < 0.2), shimmer = interesting edge ca
 
     const text = completion.choices[0]?.message?.content || "";
     const parsed = parseJsonObject(text);
+
     res.json(parsed);
   } catch (err) {
     console.error('wobble-evaluate error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/simulate', async (req, res) => {
+  const { faceTexts, cosmos = 'general' } = req.body;
+
+  const faces = ['who', 'what', 'when', 'where', 'why', 'how'];
+  const entry = faces.map(f => `${f.toUpperCase()}: ${faceTexts[f] || '[empty]'}`).join('\n');
+
+  const domain = COSMOS_DOMAINS[cosmos] || COSMOS_DOMAINS.general;
+
+  const filledFaces = faces.filter(f => (faceTexts[f] || '').trim().length > 0);
+  if (filledFaces.length < 3) {
+    return res.status(400).json({ error: 'At least 3 faces must have content to generate a simulation.' });
+  }
+
+  const prompt = `
+You are an ECS (Event Cruncher Stylus) simulation engine working in the ${domain.label} domain.
+
+Given this partially or fully filled 5W1H cube, generate a grounded simulation.
+
+Domain context: ${domain.evalContext}
+
+Cube entry:
+${entry}
+
+Your task has three parts:
+
+1. SCENARIO: Write a concise, realistic narrative (3-5 sentences) that synthesizes all filled faces into a coherent ${domain.label.toLowerCase()} scenario. Fill in any empty faces with the most plausible values given the domain context. Write it in plain prose, not as a list.
+
+2. GAPS: Identify which faces are empty or underdeveloped, and explain specifically what information is missing and why it matters for this ${domain.label.toLowerCase()} scenario. One sentence per gap.
+
+3. VARIATIONS: Propose 2 alternative plausible scenarios that differ in one or two faces — showing how a different WHO, WHEN, or WHY would change the overall story. Keep each variation to 1-2 sentences.
+
+Return JSON only with this exact shape:
+{
+  "scenario": "the synthesized narrative string",
+  "gaps": [
+    { "face": "face name", "issue": "what is missing and why it matters" }
+  ],
+  "variations": [
+    { "label": "short variation title", "description": "1-2 sentence alternative scenario" },
+    { "label": "short variation title", "description": "1-2 sentence alternative scenario" }
+  ]
+}
+`.trim();
+
+  try {
+    const navClient = new OpenAI({
+      baseURL: 'https://api.ai.it.ufl.edu/v1',
+      apiKey: process.env.NAVIGATOR_CLAUDE_API_KEY,
+    });
+
+    const completion = await navClient.chat.completions.create({
+      model: 'claude-4.6-sonnet',
+      max_tokens: 1200,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const text = completion.choices[0]?.message?.content || '';
+    const parsed = parseJsonObject(text);
+    res.json(parsed);
+  } catch (err) {
+    console.error('simulate error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
