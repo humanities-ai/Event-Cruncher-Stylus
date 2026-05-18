@@ -11,6 +11,7 @@ const OpenAI = require('openai');
 const AdmZip = require("adm-zip");
 const XLSX = require("xlsx");
 const { PDFParse } = require("pdf-parse");
+const { randomUUID } = require('crypto');
 const mammoth = require("mammoth");
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -46,6 +47,54 @@ db.connect((err) => {
         return;
     }
     console.log('Connected to MySQL Database');
+
+    db.query(`
+        CREATE TABLE IF NOT EXISTS face_descriptions (
+            face VARCHAR(20) NOT NULL,
+            short_description TEXT,
+            long_description TEXT,
+            is_locked TINYINT(1) DEFAULT 0,
+            long_desc_locked TINYINT(1) DEFAULT 0,
+            PRIMARY KEY (face)
+        )
+    `, (err2) => {
+        if (err2) console.error('Error creating face_descriptions table:', err2.message);
+        else {
+            db.query(`ALTER TABLE face_descriptions ADD COLUMN long_desc_locked TINYINT(1) DEFAULT 0`, (e) => {
+                if (e && e.code !== 'ER_DUP_FIELDNAME') console.error('Error adding long_desc_locked:', e.message);
+            });
+            db.query(`ALTER TABLE desc_files ADD COLUMN desc_type VARCHAR(10) DEFAULT 'short'`, (e) => {
+                if (e && e.code !== 'ER_DUP_FIELDNAME') console.error('Error adding desc_type:', e.message);
+            });
+        }
+    });
+
+    db.query(`
+        CREATE TABLE IF NOT EXISTS simulation_tokens (
+            token VARCHAR(36) NOT NULL PRIMARY KEY,
+            face_texts JSON NOT NULL,
+            user_id VARCHAR(255),
+            username VARCHAR(255),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `, (err3) => {
+        if (err3) console.error('Error creating simulation_tokens table:', err3.message);
+    });
+
+    db.query(`
+        CREATE TABLE IF NOT EXISTS desc_files (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id VARCHAR(255) NOT NULL,
+            face VARCHAR(20) NOT NULL,
+            desc_type VARCHAR(10) DEFAULT 'short',
+            file_data LONGBLOB NOT NULL,
+            file_name VARCHAR(255) NOT NULL,
+            file_type VARCHAR(100) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `, (err4) => {
+        if (err4) console.error('Error creating desc_files table:', err4.message);
+    });
 });
 
 // Insert a new account into the profiles DB
@@ -586,6 +635,54 @@ app.delete('/api/avfiles/delete/:fileId', (req, res) => {
 });
 
 
+// ─── DESC FILES ──────────────────────────────────────────────────────────────
+
+app.post('/api/descfiles/upload', upload.array('files', 10), (req, res) => {
+    const { user_id, face, desc_type = 'short' } = req.body;
+    const files = req.files;
+    if (!user_id || !face || !files?.length) {
+        return res.status(400).json({ error: 'Missing user_id, face, or files' });
+    }
+    const values = files.map(file => [user_id, face, desc_type, file.buffer, file.originalname, file.mimetype]);
+    db.query('INSERT INTO desc_files (user_id, face, desc_type, file_data, file_name, file_type) VALUES ?', [values], (err) => {
+        if (err) {
+            console.error('Error saving desc_files:', err);
+            return res.status(500).json({ error: 'Error saving desc_files' });
+        }
+        res.status(200).json({ message: 'Files uploaded successfully' });
+    });
+});
+
+app.get('/api/descfiles/download/:fileId', (req, res) => {
+    const { fileId } = req.params;
+    db.query('SELECT file_data, file_name, file_type FROM desc_files WHERE id = ?', [fileId], (err, results) => {
+        if (err || !results.length) return res.status(404).json({ error: 'File not found' });
+        const { file_data, file_name, file_type } = results[0];
+        let buffer = Buffer.isBuffer(file_data) ? file_data : Buffer.from(file_data);
+        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file_name)}"`);
+        res.setHeader('Content-Type', file_type || 'application/octet-stream');
+        res.setHeader('Content-Length', buffer.length);
+        res.status(200).end(buffer);
+    });
+});
+
+app.get('/api/descfiles/by-face/:face/:type', (req, res) => {
+    const { face, type } = req.params;
+    db.query('SELECT id, file_name, file_type FROM desc_files WHERE face = ? AND desc_type = ?', [face, type], (err, results) => {
+        if (err) return res.status(500).json({ error: 'Error fetching desc files' });
+        res.json(results);
+    });
+});
+
+app.delete('/api/descfiles/delete/:fileId', (req, res) => {
+    const { fileId } = req.params;
+    db.query('DELETE FROM desc_files WHERE id = ?', [fileId], (err) => {
+        if (err) return res.status(500).json({ error: 'Delete failed' });
+        res.json({ message: 'File deleted' });
+    });
+});
+
+
 // Clear all cube text and file data for a user
 app.delete('/api/avdata/clear/:userId', (req, res) => {
     const { userId } = req.params;
@@ -1105,6 +1202,124 @@ Scoring rules:
   }
 });
 
+// Get username by userId
+app.get('/api/profile/:userId', (req, res) => {
+    const { userId } = req.params;
+    db.query('SELECT username FROM profiles WHERE id = ?', [userId], (err, results) => {
+        if (err || !results.length) return res.status(404).json({ error: 'User not found' });
+        res.json({ username: results[0].username });
+    });
+});
+
+// Get face description (short + long + lock state)
+app.get('/api/face-descriptions/:face', (req, res) => {
+    const { face } = req.params;
+    db.query('SELECT * FROM face_descriptions WHERE face = ?', [face], (err, results) => {
+        if (err) return res.status(500).json({ error: 'Database error' });
+        if (!results.length) return res.json({ face, short_description: '', long_description: '', is_locked: false, long_desc_locked: false });
+        const row = results[0];
+        res.json({ ...row, is_locked: !!row.is_locked, long_desc_locked: !!row.long_desc_locked });
+    });
+});
+
+// Save short description
+app.post('/api/face-descriptions/:face/short', (req, res) => {
+    const { face } = req.params;
+    const { userId, short_description } = req.body;
+
+    db.query('SELECT username FROM profiles WHERE id = ?', [userId], (err, userResults) => {
+        if (err || !userResults.length) return res.status(401).json({ error: 'User not found' });
+        const isAdmin = userResults[0].username === 'admin';
+
+        db.query('SELECT is_locked FROM face_descriptions WHERE face = ?', [face], (err2, descResults) => {
+            if (err2) return res.status(500).json({ error: 'Database error' });
+            const isLocked = descResults.length ? !!descResults[0].is_locked : false;
+
+            if (isLocked && !isAdmin) return res.status(403).json({ error: 'This description is locked.' });
+
+            const query = `
+                INSERT INTO face_descriptions (face, short_description, long_description, is_locked)
+                VALUES (?, ?, '', 0)
+                ON DUPLICATE KEY UPDATE short_description = ?
+            `;
+            db.query(query, [face, short_description, short_description], (err3) => {
+                if (err3) return res.status(500).json({ error: 'Database error' });
+                res.json({ message: 'Saved successfully' });
+            });
+        });
+    });
+});
+
+// Save long description
+app.post('/api/face-descriptions/:face/long', (req, res) => {
+    const { face } = req.params;
+    const { userId, long_description } = req.body;
+
+    db.query('SELECT username FROM profiles WHERE id = ?', [userId], (err, userResults) => {
+        if (err || !userResults.length) return res.status(401).json({ error: 'User not found' });
+        const isAdmin = userResults[0].username === 'admin';
+
+        db.query('SELECT long_desc_locked FROM face_descriptions WHERE face = ?', [face], (err2, descResults) => {
+            if (err2) return res.status(500).json({ error: 'Database error' });
+            const isLocked = descResults.length ? !!descResults[0].long_desc_locked : false;
+
+            if (isLocked && !isAdmin) return res.status(403).json({ error: 'This description is locked.' });
+
+            const query = `
+                INSERT INTO face_descriptions (face, short_description, long_description, is_locked, long_desc_locked)
+                VALUES (?, '', ?, 0, 0)
+                ON DUPLICATE KEY UPDATE long_description = ?
+            `;
+            db.query(query, [face, long_description, long_description], (err3) => {
+                if (err3) return res.status(500).json({ error: 'Database error' });
+                res.json({ message: 'Saved successfully' });
+            });
+        });
+    });
+});
+
+// Toggle short description lock (admin only)
+app.post('/api/face-descriptions/:face/lock', (req, res) => {
+    const { face } = req.params;
+    const { userId, is_locked } = req.body;
+
+    db.query('SELECT username FROM profiles WHERE id = ?', [userId], (err, userResults) => {
+        if (err || !userResults.length) return res.status(401).json({ error: 'User not found' });
+        if (userResults[0].username !== 'admin') return res.status(403).json({ error: 'Admin only' });
+
+        const query = `
+            INSERT INTO face_descriptions (face, short_description, long_description, is_locked, long_desc_locked)
+            VALUES (?, '', '', ?, 0)
+            ON DUPLICATE KEY UPDATE is_locked = ?
+        `;
+        db.query(query, [face, is_locked ? 1 : 0, is_locked ? 1 : 0], (err2) => {
+            if (err2) return res.status(500).json({ error: 'Database error' });
+            res.json({ message: 'Lock updated', is_locked });
+        });
+    });
+});
+
+// Toggle long description lock (admin only)
+app.post('/api/face-descriptions/:face/long-lock', (req, res) => {
+    const { face } = req.params;
+    const { userId, long_desc_locked } = req.body;
+
+    db.query('SELECT username FROM profiles WHERE id = ?', [userId], (err, userResults) => {
+        if (err || !userResults.length) return res.status(401).json({ error: 'User not found' });
+        if (userResults[0].username !== 'admin') return res.status(403).json({ error: 'Admin only' });
+
+        const query = `
+            INSERT INTO face_descriptions (face, short_description, long_description, is_locked, long_desc_locked)
+            VALUES (?, '', '', 0, ?)
+            ON DUPLICATE KEY UPDATE long_desc_locked = ?
+        `;
+        db.query(query, [face, long_desc_locked ? 1 : 0, long_desc_locked ? 1 : 0], (err2) => {
+            if (err2) return res.status(500).json({ error: 'Database error' });
+            res.json({ message: 'Long lock updated', long_desc_locked });
+        });
+    });
+});
+
 app.post('/api/wobble-evaluate', async (req, res) => {
   const { faceTexts, mode = 'direct', cosmos = 'general' } = req.body;
 
@@ -1152,7 +1367,7 @@ Return JSON only:
   "overall_assessment": "1-2 sentence summary"
 }
 
-Scoring: silent = high congruence (overall < 0.2), shimmer = interesting or ambiguous edge case (0.2-0.45), wobble = genuine inconsistency (> 0.45).
+Scoring: T1, T2, T3, and overall are accuracy scores (0.0 = completely inaccurate or empty, 1.0 = fully accurate and internally consistent). silent = high accuracy (overall > 0.8), shimmer = ambiguous or partially complete (overall 0.45–0.8), wobble = genuine inconsistency or missing critical data (overall < 0.45).
 `.trim();
 
   try {
@@ -1175,6 +1390,111 @@ Scoring: silent = high congruence (overall < 0.2), shimmer = interesting or ambi
     console.error('wobble-evaluate error:', err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+app.post('/api/generate-video', async (req, res) => {
+  const { faceTexts } = req.body;
+  const faces = ['who', 'what', 'when', 'where', 'why', 'how'];
+  const entry = faces.map(f => `${f.toUpperCase()}: ${faceTexts[f] || '[empty]'}`).join('\n');
+
+  const prompt = `You are turning a 5W1H event entry into a slide-by-slide animated presentation.
+
+Event data:
+${entry}
+
+Create exactly 6 scenes — one per face in this order: WHO, WHAT, WHEN, WHERE, WHY, HOW.
+Each scene must display the ACTUAL text from that face. You may fix grammar, capitalisation, and punctuation, but do NOT reword, interpret, summarise, or add information that isn't in the original data.
+
+Return ONLY valid JSON matching this schema exactly:
+{
+  "title": "short title derived from the WHAT field (max 6 words)",
+  "scenes": [
+    {
+      "background": "#hex (dark, varied per scene)",
+      "duration": 3.5,
+      "svg": "<svg viewBox='0 0 200 150' xmlns='http://www.w3.org/2000/svg'>...animated shapes...</svg>",
+      "elements": [
+        {
+          "text": "text content",
+          "style": "tag",
+          "color": "#hex (light, readable)",
+          "animation": "fade",
+          "delay": 0.0
+        },
+        {
+          "text": "text content",
+          "style": "title",
+          "color": "#ffffff",
+          "animation": "slide-up",
+          "delay": 0.2
+        }
+      ]
+    }
+  ]
+}
+
+Rules:
+- Exactly 6 scenes, one per face (WHO → WHAT → WHEN → WHERE → WHY → HOW)
+- First element of each scene: a "tag" style label showing the face name (e.g. "WHO", "WHAT")
+- Second element: the verbatim (grammar-corrected only) text from that face, using "title" or "subtitle" style depending on length
+- If a face contains bullet points, numbered lists, or list markers (•, -, *, numbers), convert them into one or two natural sentences or short phrases that preserve the original meaning — do NOT include any bullet symbols, dashes, or numbers in the output text
+- duration: 3.0–4.0 seconds
+- style must be one of: "title", "subtitle", "body", "tag"
+- animation must be one of: "fade", "slide-up", "slide-down", "scale"
+- delay: 0.0–0.8, stagger elements
+- Dark backgrounds (#hex), light text, vary background colour per scene
+- svg: a self-contained inline SVG string for each scene. Use viewBox="0 0 200 150". Draw a simple thematic illustration relevant to the face (WHO=stick figure person, WHAT=star/burst shape, WHEN=clock/circle with hands, WHERE=location pin/map outline, WHY=question mark/lightbulb, HOW=gear/wrench). Use white or light-coloured strokes/fills on a transparent background. Include at least one <animate> or <animateTransform> element with repeatCount="indefinite" to create a looping animation. No scripts, no external references, no images, shapes and paths only. Use single quotes for all SVG attribute values to avoid breaking JSON string escaping.`.trim();
+
+  try {
+    const navClient = new OpenAI({
+      baseURL: "https://api.ai.it.ufl.edu/v1",
+      apiKey: process.env.NAVIGATOR_CLAUDE_API_KEY,
+    });
+    const completion = await navClient.chat.completions.create({
+      model: "claude-4.6-sonnet",
+      max_tokens: 4000,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const text = completion.choices[0]?.message?.content || "";
+    const parsed = parseJsonObject(text);
+    res.json(parsed);
+  } catch (err) {
+    console.error('generate-video error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/simulation-tokens', (req, res) => {
+    const { faceTexts, userId, username } = req.body;
+    const token = randomUUID();
+    db.query(
+        'INSERT INTO simulation_tokens (token, face_texts, user_id, username) VALUES (?, ?, ?, ?)',
+        [token, JSON.stringify(faceTexts), userId || null, username || null],
+        (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ token });
+        }
+    );
+});
+
+app.get('/api/simulation-tokens/:token', (req, res) => {
+    const { token } = req.params;
+    db.query(
+        'SELECT token, face_texts, user_id, username, created_at FROM simulation_tokens WHERE token = ?',
+        [token],
+        (err, results) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!results.length) return res.status(404).json({ error: 'Token not found' });
+            const row = results[0];
+            res.json({
+                token: row.token,
+                face_texts: typeof row.face_texts === 'string' ? JSON.parse(row.face_texts) : row.face_texts,
+                user_id: row.user_id,
+                username: row.username,
+                created_at: row.created_at,
+            });
+        }
+    );
 });
 
 app.post('/api/simulate', async (req, res) => {

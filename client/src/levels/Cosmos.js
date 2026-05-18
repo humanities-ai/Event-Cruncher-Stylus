@@ -39,7 +39,7 @@ function renderMarkdown(text = "") {
   });
 }
 
-function MiniOctahedron({ wobbleType }) {
+function MiniOctahedron({ wobbleType, overall = 0 }) {
   const mountRef = useRef(null);
 
   useEffect(() => {
@@ -65,7 +65,7 @@ function MiniOctahedron({ wobbleType }) {
     dir.position.set(1, 2, 3);
     scene.add(dir);
 
-    const octGeo = new THREE.OctahedronGeometry(1.2, 0);
+    const octGeo = new THREE.OctahedronGeometry(1.85, 0);
     const nonIndexed = octGeo.toNonIndexed();
     const faceCount = nonIndexed.attributes.position.count / 3;
     for (let i = 0; i < faceCount; i++) nonIndexed.addGroup(i * 3, 3, i % 2);
@@ -102,32 +102,48 @@ function MiniOctahedron({ wobbleType }) {
 
     let frameId;
     let t = 0;
-    let fallY = 0;
-    let fallVY = 0;
+    const dt = 0.016;
+
+    // Wobble burst state
+    let wobbleTimer = 1.5;   // seconds until next burst (initial delay)
+    let wobblePhase = 0;     // progress through current burst (0 = idle)
+    let wobbleDur = 0;       // total duration of current burst
+
+    const tension = 1 - overall; // 0 = accurate, 1 = inaccurate
 
     const animate = () => {
       frameId = requestAnimationFrame(animate);
-      t += 0.016;
+      t += dt;
 
-      if (wobbleType === 'silent') {
-        group.rotation.y += 0.008;
-        group.rotation.x = 0.35 + Math.sin(t * 0.4) * 0.05;
-        group.rotation.z = 0;
-        group.position.y = 0;
-      } else if (wobbleType === 'shimmer') {
-        group.rotation.y += 0.014;
-        group.rotation.x = 0.35 + Math.sin(t * 1.6) * 0.28;
-        group.rotation.z = Math.sin(t * 1.1) * 0.18;
-        group.position.y = Math.sin(t * 1.3) * 0.12;
-      } else {
-        group.rotation.y += 0.038 + Math.sin(t * 3.1) * 0.03;
-        group.rotation.x += 0.022 + Math.cos(t * 2.4) * 0.02;
-        group.rotation.z += Math.sin(t * 4.2) * 0.016;
-        fallVY -= 0.005;
-        fallY += fallVY;
-        if (fallY < -0.65) { fallY = -0.65; fallVY = Math.abs(fallVY) * 0.55; }
-        group.position.y = fallY;
+      // Tick burst timer and trigger new bursts
+      if (tension > 0.05) {
+        if (wobblePhase <= 0) {
+          wobbleTimer -= dt;
+          if (wobbleTimer <= 0) {
+            wobbleDur = 0.5 + tension * 1.0;          // 0.5s–1.5s burst
+            wobblePhase = wobbleDur;
+            // next interval: frequent at high tension, rare at low tension
+            wobbleTimer = Math.max(0.4, 2.5 * (1 - tension) + 0.3);
+          }
+        } else {
+          wobblePhase -= dt;
+          if (wobblePhase < 0) wobblePhase = 0;
+        }
       }
+
+      // Smooth envelope: 0→1→0 over the burst duration
+      const envelope = wobblePhase > 0
+        ? Math.sin(Math.PI * (1 - wobblePhase / wobbleDur))
+        : 0;
+
+      const wobbleAmp = tension * 0.42 * envelope;
+      const wobbleFreq = 1.0 + tension * 2.0;
+
+      // Base: continuous full rotation
+      group.rotation.y += 0.018;
+      group.rotation.x = 0.35 + Math.sin(t * wobbleFreq) * wobbleAmp;
+      group.rotation.z = Math.sin(t * wobbleFreq * 0.7) * wobbleAmp * 0.5;
+      group.position.y = Math.sin(t * wobbleFreq * 0.9) * wobbleAmp * 0.4;
 
       renderer.render(scene, camera);
     };
@@ -138,9 +154,87 @@ function MiniOctahedron({ wobbleType }) {
       renderer.dispose();
       if (el.contains(renderer.domElement)) el.removeChild(renderer.domElement);
     };
-  }, [wobbleType]);
+  }, [overall]);
 
-  return <div ref={mountRef} style={{ width: '100%', height: '110px' }} />;
+  return <div ref={mountRef} style={{ width: '100%', height: '160px' }} />;
+}
+
+const ANIM_PRESETS = {
+  fade:        { initial: { opacity: 0, transform: 'none' },            enter: { opacity: 1, transform: 'none' } },
+  'slide-up':  { initial: { opacity: 0, transform: 'translateY(28px)' }, enter: { opacity: 1, transform: 'translateY(0)' } },
+  'slide-down':{ initial: { opacity: 0, transform: 'translateY(-28px)' },enter: { opacity: 1, transform: 'translateY(0)' } },
+  scale:       { initial: { opacity: 0, transform: 'scale(0.72)' },     enter: { opacity: 1, transform: 'scale(1)' } },
+};
+
+const ELEM_BASE = {
+  title:    { fontSize: '2rem',    fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.1 },
+  subtitle: { fontSize: '1.15rem', fontWeight: 600, lineHeight: 1.4 },
+  body:     { fontSize: '0.9rem',  fontWeight: 400, lineHeight: 1.6 },
+  tag:      { fontSize: '0.7rem',  fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em',
+              background: 'rgba(255,255,255,0.15)', padding: '4px 14px', borderRadius: '999px', display: 'inline-block' },
+};
+
+function VideoPlayer({ scenes }) {
+  const [sceneIdx, setSceneIdx] = React.useState(0);
+  const [phase, setPhase] = React.useState('enter');
+  const [playing, setPlaying] = React.useState(true);
+  const timersRef = React.useRef([]);
+
+  const clearTimers = () => { timersRef.current.forEach(clearTimeout); timersRef.current = []; };
+
+  React.useEffect(() => {
+    if (!playing) return;
+    clearTimers();
+    const scene = scenes[sceneIdx];
+    const dur = (scene?.duration || 3) * 1000;
+    timersRef.current = [
+      setTimeout(() => setPhase('hold'), 50),
+      setTimeout(() => setPhase('exit'), dur - 400),
+      setTimeout(() => { setSceneIdx(i => (i + 1) % scenes.length); setPhase('enter'); }, dur),
+    ];
+    return clearTimers;
+  }, [sceneIdx, playing]); // eslint-disable-line
+
+  const scene = scenes?.[sceneIdx];
+  if (!scene) return null;
+  const visible = phase !== 'enter';
+
+  return (
+    <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%', borderRadius: '10px', overflow: 'hidden', background: '#0a0a0a' }}>
+      <div style={{
+        position: 'absolute', inset: 0, background: scene.background || '#1a1a2e',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        padding: '32px', gap: '14px', textAlign: 'center',
+        opacity: phase === 'exit' ? 0 : 1, transition: 'opacity 0.35s ease',
+      }}>
+        {scene.elements?.map((el, i) => {
+          const preset = ANIM_PRESETS[el.animation] || ANIM_PRESETS.fade;
+          return (
+            <div key={i} style={{
+              ...ELEM_BASE[el.style] || ELEM_BASE.body,
+              color: el.color || '#ffffff',
+              maxWidth: '82%',
+              transition: `opacity 0.45s ease ${el.delay || 0}s, transform 0.45s cubic-bezier(0.22,1,0.36,1) ${el.delay || 0}s`,
+              ...(visible ? preset.enter : preset.initial),
+            }}>
+              {el.text}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(transparent, rgba(0,0,0,0.55))', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px' }}>
+        <button onClick={() => setPlaying(p => !p)} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: '50%', width: '28px', height: '28px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem' }}>
+          {playing ? '⏸' : '▶'}
+        </button>
+        <div style={{ flex: 1, display: 'flex', gap: '4px' }}>
+          {scenes.map((_, i) => (
+            <div key={i} onClick={() => { setSceneIdx(i); setPhase('enter'); }} style={{ flex: 1, height: '3px', borderRadius: '2px', background: i === sceneIdx ? '#fff' : 'rgba(255,255,255,0.3)', cursor: 'pointer', transition: 'background 0.2s' }} />
+          ))}
+        </div>
+        <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.72rem' }}>{sceneIdx + 1} / {scenes.length}</span>
+      </div>
+    </div>
+  );
 }
 
 function InstructionsPanel({ text }) {
@@ -320,11 +414,54 @@ const Cosmos = () => {
   const [simulateLoading, setSimulateLoading] = useState(false);
   const [isSimulateModalOpen, setIsSimulateModalOpen] = useState(false);
 
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareToken, setShareToken] = useState('');
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const [isTokenSimModalOpen, setIsTokenSimModalOpen] = useState(false);
+  const [tokenSimData, setTokenSimData] = useState(null);
+  const [tokenSimLoading, setTokenSimLoading] = useState(false);
+
+  const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoData, setVideoData] = useState(null);
+
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastVisible, setToastVisible] = useState(false);
+  const toastTimerRef = useRef(null);
+
+  const [username, setUsername] = useState(null);
+  const [isShortDescModalOpen, setIsShortDescModalOpen] = useState(false);
+  const [shortDescFace, setShortDescFace] = useState(null);
+  const [shortDescText, setShortDescText] = useState('');
+  const [shortDescLocked, setShortDescLocked] = useState(false);
+  const [shortDescSaving, setShortDescSaving] = useState(false);
+  const [isLongDescModalOpen, setIsLongDescModalOpen] = useState(false);
+  const [longDescFace, setLongDescFace] = useState(null);
+  const [longDescText, setLongDescText] = useState('');
+  const [longDescLocked, setLongDescLocked] = useState(false);
+  const [longDescSaving, setLongDescSaving] = useState(false);
+  const [isAIShortDescModalOpen, setIsAIShortDescModalOpen] = useState(false);
+  const [aiShortDescFace, setAiShortDescFace] = useState(null);
+  const [aiShortDescQuery, setAiShortDescQuery] = useState('');
+  const [aiShortDescResult, setAiShortDescResult] = useState('');
+  const [aiShortDescLoading, setAiShortDescLoading] = useState(false);
+  const [aiShortDescHistory, setAiShortDescHistory] = useState([]);
+  const [isAILockedModalOpen, setIsAILockedModalOpen] = useState(false);
+  const [aiShortDescReplaced, setAiShortDescReplaced] = useState(false);
+  const [aiShortDescFiles, setAiShortDescFiles] = useState([]);
+  const [shortDescFaceFiles, setShortDescFaceFiles] = useState({});
+  const [longDescFaceFiles, setLongDescFaceFiles] = useState({});
+
+
   const faceTextsRef = useRef({});
   useEffect(() => { faceTextsRef.current = faceTexts; }, [faceTexts]);
 
   const buttonRowRef = useRef(null);
   const trashRef = useRef(null);
+  const shortDescTextareaRef = useRef(null);
+  const longDescTextareaRef = useRef(null);
 
   const handleWobbleEvaluate = async (modeOverride, domainOverride) => {
     const activeMode = typeof modeOverride === 'string' ? modeOverride : wobbleMode;
@@ -382,6 +519,125 @@ const Cosmos = () => {
     }
   };
 
+  const showToast = (msg) => {
+    clearTimeout(toastTimerRef.current);
+    setToastMessage(msg);
+    setToastVisible(true);
+    toastTimerRef.current = setTimeout(() => setToastVisible(false), 4000);
+  };
+
+  const handleShareSim = async () => {
+    setShareLoading(true);
+    const allFaceTexts = faceKeys.reduce((acc, key, i) => {
+      acc[key] = (faceTexts[i] || '').trim();
+      return acc;
+    }, {});
+    try {
+      const res = await fetch('http://localhost:4000/api/simulation-tokens', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ faceTexts: allFaceTexts, userId, username }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      setShareToken(data.token);
+      setIsShareModalOpen(true);
+    } catch (err) {
+      console.error('Share sim failed:', err);
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
+  const handleRunTokenSim = async () => {
+    if (!tokenSimData) return;
+    setTokenSimLoading(true);
+    setIsSimulateModalOpen(true);
+    setSimulateResult(null);
+    setSimulateLoading(true);
+    try {
+      const res = await fetch('http://localhost:4000/api/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ faceTexts: tokenSimData.face_texts }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Server error');
+      setSimulateResult(data);
+    } catch (err) {
+      setSimulateResult({ _error: err.message });
+    } finally {
+      setSimulateLoading(false);
+      setTokenSimLoading(false);
+    }
+  };
+
+  const handleRunTokenVideo = async () => {
+    if (!tokenSimData) return;
+    setVideoLoading(true);
+    setVideoData(null);
+    setIsVideoModalOpen(true);
+    try {
+      const res = await fetch('http://localhost:4000/api/generate-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ faceTexts: tokenSimData.face_texts }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Server error');
+      setVideoData(data);
+    } catch (err) {
+      setVideoData({ _error: err.message });
+    } finally {
+      setVideoLoading(false);
+    }
+  };
+
+  const handleRunTokenEval = async () => {
+    if (!tokenSimData) return;
+    setWobbleLoading(true);
+    setWobbleResult(null);
+    setIsWobbleModalOpen(true);
+    try {
+      const res = await fetch('http://localhost:4000/api/wobble-evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ faceTexts: tokenSimData.face_texts, mode: wobbleMode, cosmos: wobbleDomain }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Server error');
+      setWobbleResult(data);
+    } catch (err) {
+      setWobbleResult({ _error: err.message });
+    } finally {
+      setWobbleLoading(false);
+    }
+  };
+
+  const handleGenerateVideo = async () => {
+    setVideoLoading(true);
+    setVideoData(null);
+    setIsVideoModalOpen(true);
+    const allFaceTexts = faceKeys.reduce((acc, key, i) => {
+      acc[key] = (faceTexts[i] || '').trim();
+      return acc;
+    }, {});
+    try {
+      const res = await fetch('http://localhost:4000/api/generate-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ faceTexts: allFaceTexts }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Server error');
+      setVideoData(data);
+    } catch (err) {
+      setVideoData({ _error: err.message });
+    } finally {
+      setVideoLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (selectedFaceIndex !== null && faceTexts[selectedFaceIndex] !== undefined) {
       setInputText(faceTexts[selectedFaceIndex] || "");
@@ -434,10 +690,25 @@ const Cosmos = () => {
     if (storedUserId) {
       setUserId(storedUserId);
       fetchSavedData(storedUserId);
+      fetch(`http://localhost:4000/api/profile/${storedUserId}`)
+        .then(r => r.json())
+        .then(d => { if (d.username) setUsername(d.username); })
+        .catch(() => {});
     } else {
       console.error("User ID not found in localStorage");
     }
   }, []); // eslint-disable-line
+
+  useEffect(() => {
+    if (!username) return;
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (!token) return;
+    fetch(`http://localhost:4000/api/simulation-tokens/${token}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) { setTokenSimData(data); setIsTokenSimModalOpen(true); } })
+      .catch(() => {});
+  }, [username]);
 
   const fetchSavedData = async (uid) => {
     try {
@@ -1093,6 +1364,70 @@ const Cosmos = () => {
     setInputText(newText);
   };
 
+  const formatShortDesc = (command) => {
+    const textarea = shortDescTextareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const text = shortDescText;
+    const lines = text.split("\n");
+    const lineIndex = text.substring(0, start).split("\n").length - 1;
+    let newText = text;
+    switch (command) {
+      case "bullet":
+        if (lines[lineIndex].startsWith("•")) {
+          lines[lineIndex] = lines[lineIndex].substring(2);
+        } else {
+          lines[lineIndex] = `• ${lines[lineIndex].trim()}`;
+        }
+        newText = lines.join("\n");
+        break;
+      case "numbered":
+        if (/^\d+\.\s/.test(lines[lineIndex])) {
+          lines[lineIndex] = lines[lineIndex].replace(/^\d+\.\s/, "");
+        } else {
+          const numberedCount = lines.filter(l => /^\d+\.\s/.test(l)).length;
+          lines[lineIndex] = `${numberedCount + 1}. ${lines[lineIndex].trim()}`;
+        }
+        newText = lines.join("\n");
+        break;
+      default:
+        break;
+    }
+    setShortDescText(newText);
+  };
+
+  const formatLongDesc = (command) => {
+    const textarea = longDescTextareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const text = longDescText;
+    const lines = text.split("\n");
+    const lineIndex = text.substring(0, start).split("\n").length - 1;
+    let newText = text;
+    switch (command) {
+      case "bullet":
+        if (lines[lineIndex].startsWith("•")) {
+          lines[lineIndex] = lines[lineIndex].substring(2);
+        } else {
+          lines[lineIndex] = `• ${lines[lineIndex].trim()}`;
+        }
+        newText = lines.join("\n");
+        break;
+      case "numbered":
+        if (/^\d+\.\s/.test(lines[lineIndex])) {
+          lines[lineIndex] = lines[lineIndex].replace(/^\d+\.\s/, "");
+        } else {
+          const numberedCount = lines.filter(l => /^\d+\.\s/.test(l)).length;
+          lines[lineIndex] = `${numberedCount + 1}. ${lines[lineIndex].trim()}`;
+        }
+        newText = lines.join("\n");
+        break;
+      default:
+        break;
+    }
+    setLongDescText(newText);
+  };
+
   const handleKeyDown = (event) => {
     const textarea = event.target;
     if (event.key === "Enter") {
@@ -1195,6 +1530,293 @@ const Cosmos = () => {
 
   const handleContainerMouseLeave = () => setHoveredQuadrant(null);
 
+  const handleOpenShortDesc = async (face) => {
+    setShortDescFace(face);
+    setShortDescText('');
+    setShortDescLocked(false);
+    setIsShortDescModalOpen(true);
+    fetchDescFilesForFace(face, 'short');
+    try {
+      const res = await fetch(`http://localhost:4000/api/face-descriptions/${face}`);
+      const data = await res.json();
+      setShortDescText(data.short_description || '');
+      setShortDescLocked(!!data.is_locked);
+    } catch (err) {
+      console.error('Failed to load short description:', err);
+    }
+  };
+
+  const handleSaveShortDesc = async () => {
+    if (!shortDescFace || !userId) return;
+    setShortDescSaving(true);
+    try {
+      const res = await fetch(`http://localhost:4000/api/face-descriptions/${shortDescFace}/short`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, short_description: shortDescText }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed');
+      setIsShortDescModalOpen(false);
+    } catch (err) {
+      console.error('Save failed:', err);
+    } finally {
+      setShortDescSaving(false);
+    }
+  };
+
+  const handleToggleLock = async () => {
+    const face = shortDescFace;
+    if (!face || !userId) return;
+    const newLocked = !shortDescLocked;
+    try {
+      const res = await fetch(`http://localhost:4000/api/face-descriptions/${face}/lock`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, is_locked: newLocked }),
+      });
+      if (res.ok) setShortDescLocked(newLocked);
+    } catch (err) {
+      console.error('Lock toggle failed:', err);
+    }
+  };
+
+  const handleOpenAIShortDesc = async (face) => {
+    let isLocked = false;
+    try {
+      const res = await fetch(`http://localhost:4000/api/face-descriptions/${face}`);
+      const data = await res.json();
+      isLocked = !!data.is_locked;
+    } catch (err) {
+      console.error('Failed to check lock state:', err);
+    }
+    if (isLocked && username !== 'admin') {
+      setIsAILockedModalOpen(true);
+    } else {
+      setAiShortDescFace(face);
+      setAiShortDescQuery('');
+      setAiShortDescResult('');
+      setAiShortDescHistory([]);
+      setAiShortDescReplaced(false);
+      setAiShortDescFiles([]);
+      setIsAIShortDescModalOpen(true);
+    }
+  };
+
+  const handleOpenLongDesc = async (face) => {
+    setLongDescFace(face);
+    setLongDescText('');
+    setLongDescLocked(false);
+    setIsLongDescModalOpen(true);
+    fetchDescFilesForFace(face, 'long');
+    try {
+      const res = await fetch(`http://localhost:4000/api/face-descriptions/${face}`);
+      const data = await res.json();
+      setLongDescText(data.long_description || '');
+      setLongDescLocked(!!data.long_desc_locked);
+    } catch (err) {
+      console.error('Failed to load long description:', err);
+    }
+  };
+
+  const handleSaveLongDesc = async () => {
+    if (!longDescFace || !userId) return;
+    setLongDescSaving(true);
+    try {
+      const res = await fetch(`http://localhost:4000/api/face-descriptions/${longDescFace}/long`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, long_description: longDescText }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed');
+      setIsLongDescModalOpen(false);
+    } catch (err) {
+      console.error('Save failed:', err);
+    } finally {
+      setLongDescSaving(false);
+    }
+  };
+
+  const handleToggleLongLock = async () => {
+    if (!longDescFace || !userId) return;
+    const newLocked = !longDescLocked;
+    try {
+      const res = await fetch(`http://localhost:4000/api/face-descriptions/${longDescFace}/long-lock`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, long_desc_locked: newLocked }),
+      });
+      if (res.ok) setLongDescLocked(newLocked);
+    } catch (err) {
+      console.error('Long lock toggle failed:', err);
+    }
+  };
+
+  const handleAIShortDescQuery = async () => {
+    if (!aiShortDescQuery.trim()) return;
+    setAiShortDescLoading(true);
+    const allFaceTexts = faceKeys.reduce((acc, key, i) => {
+      acc[key] = (faceTexts[i] || '').trim();
+      return acc;
+    }, {});
+    const historyLines = aiShortDescHistory.map(h =>
+      `${h.role === 'user' ? 'User' : 'Assistant'}: ${h.content}`
+    ).join('\n');
+    const fileContext = aiShortDescFiles.length
+      ? `\nUploaded reference files: ${aiShortDescFiles.map(f => f.name).join(', ')}`
+      : '';
+    const prompt = `You are helping generate a short description for the "${aiShortDescFace}" face of a 5W1H event cube.
+
+Cube context:
+WHO: ${allFaceTexts.who || '(empty)'}
+WHAT: ${allFaceTexts.what || '(empty)'}
+WHEN: ${allFaceTexts.when || '(empty)'}
+WHERE: ${allFaceTexts.where || '(empty)'}
+WHY: ${allFaceTexts.why || '(empty)'}
+HOW: ${allFaceTexts.how || '(empty)'}
+${fileContext}${historyLines ? `\nPrevious conversation:\n${historyLines}\n` : ''}
+User query: ${aiShortDescQuery}
+
+Return only the short description text for the "${aiShortDescFace}" face, no preamble or explanation.`;
+    try {
+      const res = await fetch('http://localhost:4000/api/anthropic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Server error');
+      const result = data.text || '';
+      setAiShortDescResult(result);
+      setAiShortDescHistory(prev => [
+        ...prev,
+        { role: 'user', content: aiShortDescQuery },
+        { role: 'assistant', content: result },
+      ]);
+      setAiShortDescQuery('');
+    } catch (err) {
+      setAiShortDescResult('Error: ' + err.message);
+    } finally {
+      setAiShortDescLoading(false);
+    }
+  };
+
+  const handleAcceptAIShortDesc = async () => {
+    if (!aiShortDescResult || !aiShortDescFace || !userId) return;
+    setShortDescText(aiShortDescResult);
+    try {
+      await fetch(`http://localhost:4000/api/face-descriptions/${aiShortDescFace}/short`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, short_description: aiShortDescResult }),
+      });
+    } catch (err) {
+      console.error('Failed to save AI short desc:', err);
+    }
+    let existingFiles = [];
+    try {
+      const res = await fetch(`http://localhost:4000/api/descfiles/by-face/${aiShortDescFace}/short`);
+      if (res.ok) existingFiles = await res.json();
+    } catch {}
+    await Promise.all(existingFiles.map(f =>
+      fetch(`http://localhost:4000/api/descfiles/delete/${f.id}`, { method: 'DELETE' }).catch(() => {})
+    ));
+    if (aiShortDescFiles.length) {
+      const formData = new FormData();
+      formData.append('user_id', userId);
+      formData.append('face', aiShortDescFace);
+      formData.append('desc_type', 'short');
+      aiShortDescFiles.forEach(f => formData.append('files', f));
+      try {
+        await fetch('http://localhost:4000/api/descfiles/upload', { method: 'POST', body: formData });
+      } catch (err) {
+        console.error('Failed to upload AI short desc files:', err);
+      }
+    }
+    fetchDescFilesForFace(aiShortDescFace, 'short');
+    setAiShortDescReplaced(true);
+    setTimeout(() => setIsAIShortDescModalOpen(false), 2000);
+  };
+
+  const fetchDescFilesForFace = async (face, type) => {
+    const faceIndex = faceKeys.indexOf(face);
+    const setter = type === 'long' ? setLongDescFaceFiles : setShortDescFaceFiles;
+    try {
+      const res = await fetch(`http://localhost:4000/api/descfiles/by-face/${face}/${type}`);
+      if (!res.ok) return;
+      const files = await res.json();
+      setter(prev => ({
+        ...prev,
+        [faceIndex]: files.map(f => ({
+          id: f.id, name: f.file_name, type: f.file_type,
+          url: `http://localhost:4000/api/descfiles/download/${f.id}`,
+        })),
+      }));
+    } catch {}
+  };
+
+  const handleDeleteDescFile = async (faceIndex, fileId, type) => {
+    const setter = type === 'long' ? setLongDescFaceFiles : setShortDescFaceFiles;
+    try {
+      await fetch(`http://localhost:4000/api/descfiles/delete/${fileId}`, { method: 'DELETE' });
+      setter(prev => ({
+        ...prev,
+        [faceIndex]: (prev[faceIndex] || []).filter(f => f.id !== fileId),
+      }));
+    } catch (err) {
+      console.error('Failed to delete desc file:', err);
+    }
+  };
+
+  const handleDescFileUpload = async (face, type, event) => {
+    const files = Array.from(event.target.files);
+    if (!files.length || !userId) return;
+    const formData = new FormData();
+    formData.append('user_id', userId);
+    formData.append('face', face);
+    formData.append('desc_type', type);
+    files.forEach(f => formData.append('files', f));
+    await fetch('http://localhost:4000/api/descfiles/upload', { method: 'POST', body: formData });
+    fetchDescFilesForFace(face, type);
+  };
+
+  const handleContainerClick = (e) => {
+    if (selectedFaceIndex === null) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const mx = e.clientX - (rect.left + rect.width / 2);
+    const my = e.clientY - (rect.top + rect.height / 2);
+    const scale = (rect.height / 2) * 0.72;
+    const nx = mx / scale;
+    const ny = my / scale;
+    if (Math.abs(nx) + Math.abs(ny) > 1.0) return;
+    if (Math.abs(nx) < 0.34 && Math.abs(ny) < 0.34) return;
+    if (mx <= 0 && my <= 0) {
+      // Top-left — restart auto-spin
+      setSelectedFaceIndex(null);
+      setIsDITextBoxVisible(true);
+      cancelFaceAnimRef.current?.();
+      autoSpinRef.current = true;
+      const faceLabels = faceKeys.map((k) => t(`cube_faces.${k}`).toUpperCase() + "?");
+      frontMeshesRef.current.forEach((m, i) => {
+        const old = m.material.map;
+        m.material.map = makeFaceTex(faceLabels[i], false, false);
+        m.material.opacity = 0.82;
+        m.material.needsUpdate = true;
+        if (old && old !== m.material.map) old.dispose();
+      });
+    } else if (mx > 0 && my <= 0) {
+      // Top-right — open short description modal
+      handleOpenShortDesc(faceKeys[selectedFaceIndex]);
+    } else if (mx <= 0 && my > 0) {
+      // Bottom-left — open long description modal
+      handleOpenLongDesc(faceKeys[selectedFaceIndex]);
+    } else if (mx > 0 && my > 0) {
+      // Bottom-right — AI short description query
+      handleOpenAIShortDesc(faceKeys[selectedFaceIndex]);
+    }
+  };
+
   // ─── RENDER ───────────────────────────────────────────────────────────────────
   return (
     <div className="tetrahedral-level">
@@ -1223,6 +1845,7 @@ const Cosmos = () => {
         className="tetrahedral-level-container"
         onMouseMove={handleContainerMouseMove}
         onMouseLeave={handleContainerMouseLeave}
+        onClick={handleContainerClick}
       />
 
       {/* Quadrant hover tooltip */}
@@ -1234,29 +1857,26 @@ const Cosmos = () => {
           {hoveredQuadrant === 1 && (
             <>
               <div className="tet-tooltip-title">THE WORKSPACE</div>
-              <div className="tet-tooltip-row"><span className="tet-tooltip-tag">SHORT CLICK</span> Access the editable workspace.</div>
-              <div className="tet-tooltip-row"><span className="tet-tooltip-tag">LONG CLICK</span> View a readable-version of the workspace.</div>
+              <div className="tet-tooltip-row"><span className="tet-tooltip-tag">CLICK</span> <span style={{ color: '#fff' }}>Restart the rotation.</span></div>
             </>
           )}
           {hoveredQuadrant === 2 && (
             <>
               <div className="tet-tooltip-title">THE SHORT DESCRIPTION</div>
-              <div className="tet-tooltip-row"><span className="tet-tooltip-tag">SHORT CLICK</span> Access the editable workspace.</div>
-              <div className="tet-tooltip-row"><span className="tet-tooltip-tag">LONG CLICK</span> View the short description / questions for this surface.</div>
+              <div className="tet-tooltip-row"><span className="tet-tooltip-tag">CLICK</span> <span style={{ color: '#fff' }}>View the short description / questions for this surface.</span></div>
             </>
           )}
           {hoveredQuadrant === 3 && (
             <>
               <div className="tet-tooltip-title">THE LONG DESCRIPTION</div>
-              <div className="tet-tooltip-row"><span className="tet-tooltip-tag">SHORT CLICK</span> Access the editable workspace.</div>
-              <div className="tet-tooltip-row"><span className="tet-tooltip-tag">LONG CLICK</span> View the long, detailed description of this surface.</div>
+              <div className="tet-tooltip-row"><span className="tet-tooltip-tag">CLICK</span> <span style={{ color: '#fff' }}>View the long, detailed description of this surface.</span></div>
             </>
           )}
           {hoveredQuadrant === 4 && (
             <>
               <div className="tet-tooltip-title">THE 5W1H LLM PROCESSOR</div>
-              <div className="tet-tooltip-row"><span className="tet-tooltip-tag">SHORT CLICK</span> Generate an AI-aided short description for this workspace.</div>
-              <div className="tet-tooltip-row"><span className="tet-tooltip-tag">LONG CLICK</span> Generate an AI-aided long description for this workspace.</div>
+              <div className="tet-tooltip-row"><span className="tet-tooltip-tag">SHORT CLICK</span> Generate an AI-aided short description for this surface.</div>
+              <div className="tet-tooltip-row"><span className="tet-tooltip-tag">LONG CLICK</span> Generate an AI-aided long description for this surface.</div>
             </>
           )}
         </div>
@@ -1398,9 +2018,419 @@ const Cosmos = () => {
         </div>
       )}
 
+      {/* AI Locked Modal */}
+      {isAILockedModalOpen && (
+        <div className="tet-validation-modal-overlay" style={{ zIndex: 3300 }}>
+          <div className="tet-validation-modal" style={{ maxWidth: '360px', textAlign: 'center' }}>
+            <button className="close-button" onClick={() => setIsAILockedModalOpen(false)}>X</button>
+            <div style={{ fontSize: '2rem', marginBottom: '10px' }}>🔒</div>
+            <h3 style={{ marginTop: 0, marginBottom: '10px' }}>Locked</h3>
+            <p style={{ color: '#4b5563', fontSize: '0.9rem' }}>
+              The AI short description generator has been locked by the admin.
+            </p>
+            <button
+              onClick={() => setIsAILockedModalOpen(false)}
+              className="tet-mode-btn tet-mode-btn--active"
+              style={{ marginTop: '16px', padding: '7px 24px' }}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* AI Short Description Modal */}
+      {isAIShortDescModalOpen && (
+        <div className="tet-validation-modal-overlay" style={{ zIndex: 3300 }}>
+          <div className="tet-validation-modal" style={{ maxWidth: '560px' }}>
+            <button className="close-button" onClick={() => setIsAIShortDescModalOpen(false)}>X</button>
+            <h3 style={{ marginTop: '-6px', marginBottom: '14px' }}>
+              Short Description Generator — {aiShortDescFace?.toUpperCase()}
+            </h3>
+
+            {aiShortDescResult && (
+              <div style={{
+                background: '#fefce8', border: '1.5px solid #fde047', borderRadius: '8px',
+                padding: '12px 14px', marginBottom: '14px', fontSize: '0.92rem',
+                lineHeight: 1.6, color: '#713f12', whiteSpace: 'pre-wrap',
+              }}>
+                {aiShortDescResult}
+              </div>
+            )}
+
+            {aiShortDescResult && (
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
+                <button
+                  onClick={handleAcceptAIShortDesc}
+                  style={{ padding: '5px 14px', background: aiShortDescReplaced ? '#991b1b' : '#dc2626', border: `1.5px solid ${aiShortDescReplaced ? '#991b1b' : '#dc2626'}`, borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '0.82em', cursor: aiShortDescReplaced ? 'default' : 'pointer' }}
+                >
+                  {aiShortDescReplaced ? 'Replaced' : 'Replace Short Description'}
+                </button>
+              </div>
+            )}
+
+            <div style={{ border: '1.5px solid #dde3ee', borderRadius: '8px', background: 'white', marginBottom: '10px' }}>
+              <textarea
+                value={aiShortDescQuery}
+                onChange={e => setAiShortDescQuery(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAIShortDescQuery(); } }}
+                placeholder={aiShortDescResult ? 'Follow-up query…' : 'Enter a query to generate a short description…'}
+                rows={3}
+                style={{
+                  width: '100%', boxSizing: 'border-box', padding: '10px', fontSize: '0.9rem',
+                  border: 'none', borderRadius: '8px 8px 0 0', resize: 'vertical',
+                  fontFamily: 'inherit', lineHeight: 1.5,
+                }}
+              />
+              {aiShortDescFiles.length > 0 && (
+                <div style={{ borderTop: '1px solid #e5e7eb', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {aiShortDescFiles.map((file, i) => (
+                    <div key={i} className="file-item" style={{ background: '#eef2f7' }}>
+                      <button className="delete-file-button" onClick={() => setAiShortDescFiles(prev => prev.filter((_, idx) => idx !== i))}>X</button>
+                      <span style={{ color: '#1e2f52', fontSize: '0.85rem', marginLeft: '10px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', color: '#222' }} title="Insert files">
+                  <input type="file" multiple style={{ display: 'none' }} onChange={e => setAiShortDescFiles(prev => [...prev, ...Array.from(e.target.files)])} />
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '22px', height: '22px' }}>
+                    <line x1="12" y1="14" x2="12" y2="3"/>
+                    <polyline points="8,7 12,3 16,7"/>
+                    <path d="M4 17v1.5A1.5 1.5 0 005.5 20h13a1.5 1.5 0 001.5-1.5V17"/>
+                  </svg>
+                </label>
+                <button
+                  onClick={handleAIShortDescQuery}
+                  disabled={aiShortDescLoading || !aiShortDescQuery.trim()}
+                  className="tet-mode-btn tet-mode-btn--active"
+                  style={{ padding: '7px 18px', background: '#000', borderColor: '#000', opacity: aiShortDescLoading || !aiShortDescQuery.trim() ? 0.5 : 1 }}
+                >
+                  {aiShortDescLoading ? '…' : aiShortDescResult ? 'Re-generate' : 'Generate'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Short Description Modal */}
+      {isShortDescModalOpen && (
+        <div className="tet-validation-modal-overlay">
+          <div className="tet-validation-modal">
+            <button className="close-button" onClick={() => setIsShortDescModalOpen(false)}>X</button>
+            <h3 style={{ marginTop: '-6px' }}>Short Description — {shortDescFace?.toUpperCase()}</h3>
+
+            {(username === 'admin' || !shortDescLocked) ? (
+              <div style={{ position: 'relative', marginTop: '15px', border: '1.5px solid #dde3ee', borderRadius: '8px', background: 'white' }}>
+                <button className="textarea-bullet-btn" onClick={() => formatShortDesc("bullet")}>•</button>
+                <button className="textarea-numbered-btn" onClick={() => formatShortDesc("numbered")}>123</button>
+                <textarea
+                  ref={shortDescTextareaRef}
+                  value={shortDescText}
+                  onChange={(e) => setShortDescText(e.target.value)}
+                  placeholder="Type here..."
+                  rows={8}
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    padding: '10px',
+                    fontSize: '0.92em',
+                    border: 'none',
+                    borderRadius: '8px 8px 0 0',
+                    resize: 'vertical',
+                    fontFamily: 'inherit',
+                    lineHeight: 1.5,
+                  }}
+                />
+                {(shortDescFaceFiles[faceKeys.indexOf(shortDescFace)]?.length ?? 0) > 0 && (
+                  <div style={{ borderTop: '1px solid #e5e7eb', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {shortDescFaceFiles[faceKeys.indexOf(shortDescFace)].map((file, i) => (
+                      <div key={i} className="file-item" style={{ background: '#eef2f7' }}>
+                        <button className="delete-file-button" onClick={() => handleDeleteDescFile(faceKeys.indexOf(shortDescFace), file.id, 'short')}>X</button>
+                        <a href={file.url} target="_blank" rel="noopener noreferrer"
+                          style={{ flex: 1, color: '#1e2f52', textDecoration: 'underline', fontSize: '0.85rem', marginLeft: '10px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {file.name}
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="tet-validation-card" style={{ minHeight: '120px', lineHeight: 1.6, fontSize: '0.92em', whiteSpace: 'pre-wrap', marginTop: '15px' }}>
+                {shortDescText || <em style={{ color: '#9ca3af' }}>No short description yet.</em>}
+                {(shortDescFaceFiles[faceKeys.indexOf(shortDescFace)]?.length ?? 0) > 0 && (
+                  <div style={{ borderTop: '1px solid #e5e7eb', marginTop: '10px', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {shortDescFaceFiles[faceKeys.indexOf(shortDescFace)].map((file, i) => (
+                      <div key={i} className="file-item" style={{ background: '#eef2f7' }}>
+                        <a href={file.url} target="_blank" rel="noopener noreferrer"
+                          style={{ flex: 1, color: '#1e2f52', textDecoration: 'underline', fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {file.name}
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {(username === 'admin' || !shortDescLocked) && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
+                {username === 'admin' ? (
+                  <button
+                    onClick={handleToggleLock}
+                    style={{
+                      fontSize: '0.78em',
+                      border: '1.5px solid #dde3ee',
+                      borderRadius: '999px',
+                      padding: '3px 12px',
+                      background: shortDescLocked ? '#7f1d1d' : '#fbbf24',
+                      color: shortDescLocked ? '#fff' : '#000',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {shortDescLocked ? '🔒 Locked' : '🔓 Unlocked'}
+                  </button>
+                ) : <span />}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', color: '#222' }} title="Insert files">
+                    <input type="file" multiple style={{ display: 'none' }} onChange={e => handleDescFileUpload(shortDescFace, 'short', e)} />
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '22px', height: '22px' }}>
+                      <line x1="12" y1="14" x2="12" y2="3"/>
+                      <polyline points="8,7 12,3 16,7"/>
+                      <path d="M4 17v1.5A1.5 1.5 0 005.5 20h13a1.5 1.5 0 001.5-1.5V17"/>
+                    </svg>
+                  </label>
+                  <button
+                    onClick={handleSaveShortDesc}
+                    disabled={shortDescSaving}
+                    className="tet-mode-btn tet-mode-btn--active"
+                    style={{ borderRadius: '8px !important', padding: '6px 20px', opacity: shortDescSaving ? 0.5 : 1 }}
+                  >
+                    {shortDescSaving ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Long Description Modal */}
+      {isLongDescModalOpen && (
+        <div className="tet-validation-modal-overlay">
+          <div className="tet-validation-modal">
+            <button className="close-button" onClick={() => setIsLongDescModalOpen(false)}>X</button>
+            <h3 style={{ marginTop: '-6px' }}>Long Description — {longDescFace?.toUpperCase()}</h3>
+
+            {(username === 'admin' || !longDescLocked) ? (
+              <div style={{ position: 'relative', marginTop: '15px', border: '1.5px solid #dde3ee', borderRadius: '8px', background: 'white' }}>
+                <button className="textarea-bullet-btn" onClick={() => formatLongDesc("bullet")}>•</button>
+                <button className="textarea-numbered-btn" onClick={() => formatLongDesc("numbered")}>123</button>
+                <textarea
+                  ref={longDescTextareaRef}
+                  value={longDescText}
+                  onChange={(e) => setLongDescText(e.target.value)}
+                  placeholder="Type here..."
+                  rows={8}
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    padding: '10px',
+                    fontSize: '0.92em',
+                    border: 'none',
+                    borderRadius: '8px 8px 0 0',
+                    resize: 'vertical',
+                    fontFamily: 'inherit',
+                    lineHeight: 1.5,
+                  }}
+                />
+                {(longDescFaceFiles[faceKeys.indexOf(longDescFace)]?.length ?? 0) > 0 && (
+                  <div style={{ borderTop: '1px solid #e5e7eb', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {longDescFaceFiles[faceKeys.indexOf(longDescFace)].map((file, i) => (
+                      <div key={i} className="file-item" style={{ background: '#eef2f7' }}>
+                        <button className="delete-file-button" onClick={() => handleDeleteDescFile(faceKeys.indexOf(longDescFace), file.id, 'long')}>X</button>
+                        <a href={file.url} target="_blank" rel="noopener noreferrer"
+                          style={{ flex: 1, color: '#1e2f52', textDecoration: 'underline', fontSize: '0.85rem', marginLeft: '10px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {file.name}
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="tet-validation-card" style={{ minHeight: '120px', lineHeight: 1.6, fontSize: '0.92em', whiteSpace: 'pre-wrap', marginTop: '15px' }}>
+                {longDescText || <em style={{ color: '#9ca3af' }}>No long description yet.</em>}
+                {(longDescFaceFiles[faceKeys.indexOf(longDescFace)]?.length ?? 0) > 0 && (
+                  <div style={{ borderTop: '1px solid #e5e7eb', marginTop: '10px', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {longDescFaceFiles[faceKeys.indexOf(longDescFace)].map((file, i) => (
+                      <div key={i} className="file-item" style={{ background: '#eef2f7' }}>
+                        <a href={file.url} target="_blank" rel="noopener noreferrer"
+                          style={{ flex: 1, color: '#1e2f52', textDecoration: 'underline', fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {file.name}
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {(username === 'admin' || !longDescLocked) && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
+                {username === 'admin' ? (
+                  <button
+                    onClick={handleToggleLongLock}
+                    style={{
+                      fontSize: '0.78em',
+                      border: '1.5px solid #dde3ee',
+                      borderRadius: '999px',
+                      padding: '3px 12px',
+                      background: longDescLocked ? '#7f1d1d' : '#fbbf24',
+                      color: longDescLocked ? '#fff' : '#000',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {longDescLocked ? '🔒 Locked' : '🔓 Unlocked'}
+                  </button>
+                ) : <span />}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', color: '#222' }} title="Insert files">
+                    <input type="file" multiple style={{ display: 'none' }} onChange={e => handleDescFileUpload(longDescFace, 'long', e)} />
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '22px', height: '22px' }}>
+                      <line x1="12" y1="14" x2="12" y2="3"/>
+                      <polyline points="8,7 12,3 16,7"/>
+                      <path d="M4 17v1.5A1.5 1.5 0 005.5 20h13a1.5 1.5 0 001.5-1.5V17"/>
+                    </svg>
+                  </label>
+                  <button
+                    onClick={handleSaveLongDesc}
+                    disabled={longDescSaving}
+                    className="tet-mode-btn tet-mode-btn--active"
+                    style={{ borderRadius: '8px !important', padding: '6px 20px', opacity: longDescSaving ? 0.5 : 1 }}
+                  >
+                    {longDescSaving ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Video Modal */}
+      {isVideoModalOpen && (
+        <div className="tet-validation-modal-overlay" style={{ zIndex: 3300 }}>
+          <div className="tet-validation-modal" style={{ maxWidth: '640px', background: '#cecece' }}>
+            <button className="close-button" onClick={() => setIsVideoModalOpen(false)}>X</button>
+            <h3 style={{ marginTop: '-6px', marginBottom: '14px' }}>
+              {videoData?.title || '5W1H Video Visual'}
+            </h3>
+
+            {videoLoading && (
+              <div className="tet-validation-loading">Generating your video…</div>
+            )}
+
+            {videoData?._error && (
+              <div className="tet-validation-error">{videoData._error}</div>
+            )}
+
+            {videoData?.scenes && (
+              <VideoPlayer scenes={videoData.scenes} />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Share Simulation Link Modal */}
+      {isShareModalOpen && (
+        <div className="tet-validation-modal-overlay">
+          <div className="tet-validation-modal">
+            <button className="close-button" onClick={() => setIsShareModalOpen(false)}>X</button>
+            <h3 style={{ marginTop: '-6px' }}>Share Link Ready</h3>
+            <p style={{ fontSize: '0.85em', color: '#4b5563', margin: '4px 0 12px' }}>
+              Anyone logged in can open this link to run a simulation, generate a video, or evaluate the consistency of your data.
+            </p>
+            <div style={{
+              background: '#f3f4f6', border: '1.5px solid #dde3ee', borderRadius: '8px',
+              padding: '10px 12px', fontFamily: 'monospace', fontSize: '0.8em',
+              wordBreak: 'break-all', color: '#1f2937', lineHeight: 1.5,
+            }}>
+              {`${window.location.origin}${window.location.pathname}?token=${shareToken}`}
+            </div>
+            <button
+              onClick={() => {
+                const link = `${window.location.origin}${window.location.pathname}?token=${shareToken}`;
+                navigator.clipboard.writeText(link);
+                setLinkCopied(true);
+                setTimeout(() => setLinkCopied(false), 2500);
+              }}
+              className="tet-mode-btn tet-mode-btn--active"
+              style={{ marginTop: '10px', padding: '7px 20px' }}
+            >
+              {linkCopied ? 'Copied' : 'Copy Link'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Shared Link Modal */}
+      {isTokenSimModalOpen && tokenSimData && (
+        <div className="tet-validation-modal-overlay">
+          <div className="tet-validation-modal">
+            <button className="close-button" onClick={() => setIsTokenSimModalOpen(false)}>X</button>
+            <h3 style={{ marginTop: '-6px' }}>Shared by <em>{tokenSimData.username || tokenSimData.user_id || 'unknown'}</em></h3>
+            {tokenSimData.created_at && (
+              <p style={{ fontSize: '0.85em', color: '#4b5563', margin: '4px 0 12px' }}>
+                {new Date(tokenSimData.created_at).toLocaleString()}
+              </p>
+            )}
+
+            <div className="tet-validation-grid" style={{ marginBottom: '16px' }}>
+              {Object.entries(tokenSimData.face_texts).filter(([, v]) => v).map(([face, text]) => (
+                <div key={face} className="tet-validation-card">
+                  <strong style={{ fontSize: '0.78em', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#6b7280' }}>{face}</strong>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.88em', lineHeight: 1.5 }}>{text}</p>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={handleRunTokenSim}
+                disabled={tokenSimLoading}
+                style={{ flex: 1, padding: '8px 12px', background: '#2563eb', border: '1.5px solid #2563eb', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '0.9em', cursor: tokenSimLoading ? 'not-allowed' : 'pointer', opacity: tokenSimLoading ? 0.5 : 1 }}
+              >
+                {tokenSimLoading ? 'Running…' : 'Textual Simulation'}
+              </button>
+              <button
+                onClick={handleRunTokenVideo}
+                disabled={videoLoading}
+                style={{ flex: 1, padding: '8px 12px', background: '#f5a623', border: '1.5px solid #f5a623', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '0.9em', cursor: videoLoading ? 'not-allowed' : 'pointer', opacity: videoLoading ? 0.5 : 1 }}
+              >
+                {videoLoading ? 'Generating…' : 'Video Visual'}
+              </button>
+              <button
+                onClick={handleRunTokenEval}
+                disabled={wobbleLoading}
+                style={{ flex: 1, padding: '8px 12px', background: '#16a34a', border: '1.5px solid #16a34a', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '0.9em', cursor: wobbleLoading ? 'not-allowed' : 'pointer', opacity: wobbleLoading ? 0.5 : 1 }}
+              >
+                {wobbleLoading ? 'Evaluating…' : 'Consistency Evaluator'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Wobble Modal */}
       {isWobbleModalOpen && (
-        <div className="tet-validation-modal-overlay">
+        <div className="tet-validation-modal-overlay" style={{ zIndex: 3300 }}>
           <div className="tet-validation-modal">
             <button className="close-button" onClick={() => setIsWobbleModalOpen(false)}>X</button>
             <h3>5W1H Consistency Evaluation</h3>
@@ -1463,7 +2493,7 @@ const Cosmos = () => {
                 }`}>
                   {wobbleResult.wobble?.type === 'silent' ? '✦ SILENT' :
                    wobbleResult.wobble?.type === 'shimmer' ? '◈ SHIMMER' : '⟁ WOBBLE'}
-                  {' — '}{Math.round((wobbleResult.wobble?.overall || 0) * 100)}% tension
+                  {' — '}{Math.round((1 - (wobbleResult.wobble?.overall || 0)) * 100)}% tension
                 </div>
 
                 {/* Tier bars */}
@@ -1492,7 +2522,9 @@ const Cosmos = () => {
                 <p><em>{renderMarkdown(wobbleResult.overall_assessment)}</em></p>
 
                 {/* Mini octahedron */}
-                <MiniOctahedron wobbleType={wobbleResult.wobble?.type || 'silent'} />
+                <div style={{ marginTop: '20px' }}>
+                  <MiniOctahedron wobbleType={wobbleResult.wobble?.type || 'silent'} overall={wobbleResult.wobble?.overall || 0} />
+                </div>
               </div>
             )}
           </div>
@@ -1501,10 +2533,10 @@ const Cosmos = () => {
 
       {/* Simulate Modal */}
       {isSimulateModalOpen && (
-        <div className="tet-validation-modal-overlay">
-          <div className="tet-validation-modal">
+        <div className="tet-validation-modal-overlay" style={{ zIndex: 3300 }}>
+          <div className="tet-validation-modal" style={{ background: '#fdf3e8' }}>
             <button className="close-button" onClick={() => setIsSimulateModalOpen(false)}>X</button>
-            <h3>5W1H Simulation</h3>
+            <h3>5W1H Textual Simulation</h3>
 
             {simulateLoading && (
               <div className="tet-validation-loading">Generating simulation…</div>
@@ -1515,7 +2547,7 @@ const Cosmos = () => {
             )}
 
             {simulateResult && !simulateResult._error && (
-              <div>
+              <div style={{ marginTop: '10px' }}>
                 {/* Scenario */}
                 <div style={{ marginBottom: '16px' }}>
                   <div className="tet-validation-badge" style={{ background: '#e8f0fe', color: '#1a3a6b', marginBottom: '10px', fontSize: '0.88rem' }}>
@@ -1569,25 +2601,120 @@ const Cosmos = () => {
 
       {/* AI Button — runs wobble evaluation */}
       <button
-        className="tet-ai-button"
+        className="tet-ai-button tet-ai-button--icon"
         onClick={handleWobbleEvaluate}
         disabled={wobbleLoading}
-        title="Evaluate full entry consistency"
-        style={{ width: '52px' }}
+        title="Evaluate your entries for consistency and suggestions"
+        style={{ width: '44px', height: '44px', right: '176px', background: 'transparent', padding: 0 }}
       >
-        {wobbleLoading ? "..." : "EVAL"}
+        {wobbleLoading ? (
+          <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>...</span>
+        ) : (
+          <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '38px', height: '38px' }}>
+            {/* clipboard body */}
+            <rect x="10" y="10" width="38" height="46" rx="4" ry="4" stroke="#222" strokeWidth="3.2" fill="white"/>
+            {/* clipboard clip */}
+            <rect x="22" y="6" width="14" height="8" rx="3" ry="3" stroke="#222" strokeWidth="3" fill="white"/>
+            {/* check 1 */}
+            <polyline points="16,22 19,26 25,19" stroke="#222" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"/>
+            {/* line 1 */}
+            <line x1="28" y1="22" x2="42" y2="22" stroke="#222" strokeWidth="2.8" strokeLinecap="round"/>
+            {/* check 2 */}
+            <polyline points="16,32 19,36 25,29" stroke="#222" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"/>
+            {/* line 2 */}
+            <line x1="28" y1="32" x2="42" y2="32" stroke="#222" strokeWidth="2.8" strokeLinecap="round"/>
+            {/* check 3 */}
+            <polyline points="16,42 19,46 25,39" stroke="#222" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"/>
+            {/* line 3 */}
+            <line x1="28" y1="42" x2="42" y2="42" stroke="#222" strokeWidth="2.8" strokeLinecap="round"/>
+            {/* badge circle */}
+            <circle cx="49" cy="49" r="12" fill="white" stroke="#222" strokeWidth="3"/>
+            {/* badge check */}
+            <polyline points="43,49 47,53 55,44" stroke="#222" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        )}
       </button>
 
       {/* Simulate Button */}
       <button
-        className="tet-ai-button"
+        className="tet-ai-button tet-ai-button--icon"
         onClick={handleSimulate}
         disabled={simulateLoading}
-        title="Generate a scenario simulation from your cube"
-        style={{ right: '196px', width: '52px' }}
+        title="Generate a textual simulation of your data"
+        style={{ width: '44px', height: '44px', right: '230px', background: 'transparent', padding: 0 }}
       >
-        {simulateLoading ? "..." : "SIM"}
+        {simulateLoading ? (
+          <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>...</span>
+        ) : (
+          <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '38px', height: '38px', marginLeft: '10px' }}>
+            {/* outer orbital ring — horizontal ellipse */}
+            <ellipse cx="32" cy="32" rx="28" ry="11" stroke="#222" strokeWidth="3" fill="none"/>
+            {/* outer orbital ring — tilted ellipse (NW-SE) */}
+            <ellipse cx="32" cy="32" rx="28" ry="11" stroke="#222" strokeWidth="3" fill="none" transform="rotate(60 32 32)"/>
+            {/* outer orbital ring — tilted ellipse (NE-SW) */}
+            <ellipse cx="32" cy="32" rx="28" ry="11" stroke="#222" strokeWidth="3" fill="none" transform="rotate(-60 32 32)"/>
+            {/* cube — top face */}
+            <polygon points="32,14 43,20 32,26 21,20" stroke="#222" strokeWidth="2.6" strokeLinejoin="round" fill="white"/>
+            {/* cube — left face */}
+            <polygon points="21,20 32,26 32,38 21,32" stroke="#222" strokeWidth="2.6" strokeLinejoin="round" fill="white"/>
+            {/* cube — right face */}
+            <polygon points="43,20 43,32 32,38 32,26" stroke="#222" strokeWidth="2.6" strokeLinejoin="round" fill="white"/>
+          </svg>
+        )}
       </button>
+
+      {/* Video Button */}
+      <button
+        onClick={handleGenerateVideo}
+        disabled={videoLoading}
+        title="Generate a video animation using your data"
+        style={{
+          position: 'fixed', zIndex: 1000, bottom: '50px', right: '284px',
+          width: '42px', height: '42px', borderRadius: '50%',
+          background: '#222',
+          border: 'none', cursor: videoLoading ? 'not-allowed' : 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          opacity: videoLoading ? 0.45 : 1,
+          transition: 'transform 0.15s ease, opacity 0.15s ease',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+        }}
+        onMouseEnter={e => { if (!videoLoading) e.currentTarget.style.transform = 'translateY(-3px)'; }}
+        onMouseLeave={e => { e.currentTarget.style.transform = ''; }}
+      >
+        {videoLoading ? (
+          <span style={{ color: '#fff', fontSize: '0.7rem', fontWeight: 700 }}>...</span>
+        ) : (
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <rect x="2" y="4" width="20" height="16" rx="1.5" stroke="white" strokeWidth="2"/>
+            <polygon points="9.5,8.5 9.5,15.5 16.5,12" fill="white"/>
+          </svg>
+        )}
+      </button>
+
+      {/* Share Simulation Button */}
+      {username && (
+        <button
+          onClick={handleShareSim}
+          disabled={shareLoading}
+          title="Generate a link to share your simulation & animation"
+          style={{
+            position: 'fixed', zIndex: 1000, bottom: '50px', right: '128px',
+            width: '38px', height: '38px', background: 'transparent', border: 'none',
+            padding: 0, cursor: shareLoading ? 'not-allowed' : 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            opacity: shareLoading ? 0.45 : 1, transition: 'transform 0.15s ease, opacity 0.15s ease',
+          }}
+          onMouseEnter={e => { if (!shareLoading) e.currentTarget.style.transform = 'translateY(-3px)'; }}
+          onMouseLeave={e => { e.currentTarget.style.transform = ''; }}
+        >
+          {shareLoading ? "..." : (
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#222" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+            </svg>
+          )}
+        </button>
+      )}
 
       <button className="xlsx-button" onClick={handleXLSXClick} title="Spreadsheet view">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1655,7 +2782,7 @@ const Cosmos = () => {
       )}
 
       {/* Download Button */}
-      <button className="download-button" onClick={handleDownloadClick}>
+      <button className="download-button" onClick={handleDownloadClick} title="Download now">
         <img src="/images/buttons/downloadButton.jpg" alt="Download Button" className="download-image" />
       </button>
 
@@ -1664,6 +2791,21 @@ const Cosmos = () => {
         <div className="footer-left">{t("footer_left")}</div>
         <div className="footer-right">{t("footer_right")}</div>
       </footer>
+
+      {/* Copy Link Toast */}
+      <div style={{
+        position: 'fixed', top: toastVisible ? '18px' : '-80px', left: '50%',
+        transform: 'translateX(-50%)',
+        background: '#1a2744', color: '#dce6f5',
+        padding: '10px 20px', borderRadius: '10px',
+        fontSize: '0.82em', fontWeight: 500,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.22)',
+        zIndex: 9999, maxWidth: '90vw', wordBreak: 'break-all', textAlign: 'center',
+        transition: 'top 0.3s cubic-bezier(0.22,1,0.36,1)',
+        pointerEvents: 'none',
+      }}>
+        {toastMessage}
+      </div>
     </div>
   );
 };

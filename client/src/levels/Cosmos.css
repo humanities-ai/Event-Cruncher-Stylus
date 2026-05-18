@@ -94,7 +94,7 @@ html, body {
   border-radius: 4px;
   color: #001f52;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   line-height: 1.45;
   overflow-y: auto;
 }
@@ -319,7 +319,7 @@ html, body {
   width: min(720px, 100%);
   max-height: 85vh;
   overflow-y: auto;
-  background: #f8fafc;
+  background: #e8f1fb;
   border-radius: 14px;
   padding: 22px;
   box-shadow: 0 22px 60px rgba(15, 23, 42, 0.3);
@@ -357,6 +357,10 @@ html, body {
   cursor: not-allowed;
 }
 
+.tet-ai-button--icon {
+  border: none !important;
+}
+
 /* ─── WOBBLE MODE BUTTONS ─────────────────────────────────────────────────── */
 .tet-mode-btn {
   background: #ffffff !important;
@@ -380,6 +384,11 @@ html, body {
   background: #000000 !important;
   color: #ffffff !important;
   border-color: #000000 !important;
+}
+
+.tet-mode-btn--active:hover:not(:disabled) {
+  background: #3a3a3a !important;
+  border-color: #3a3a3a !important;
 }
 
 .tet-mode-btn:disabled {
@@ -455,8 +464,8 @@ html, body {
   display: flex;
   align-items: center;
   width: 100%;
-  background-color: #f8f9fa;
-  border: 1px solid #ccc;
+  background-color: #eef2f7;
+  border: 1px solid #c5d0e8;
   border-radius: 4px;
   padding: 5px 8px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
@@ -464,7 +473,7 @@ html, body {
 
 .file-item span {
   flex: 1;
-  color: black;
+  color: #1e2f52;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
