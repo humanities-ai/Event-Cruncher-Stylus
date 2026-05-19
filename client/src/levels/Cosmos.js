@@ -2390,9 +2390,9 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
 
             {aiLongDescResult && (
               <div style={{
-                background: '#eff6ff', border: '1.5px solid #93c5fd', borderRadius: '8px',
+                background: '#fefce8', border: '1.5px solid #fde047', borderRadius: '8px',
                 padding: '12px 14px', marginBottom: '14px', fontSize: '0.92rem',
-                lineHeight: 1.6, color: '#1e3a5f', whiteSpace: 'pre-wrap',
+                lineHeight: 1.6, color: '#713f12', whiteSpace: 'pre-wrap',
               }}>
                 {aiLongDescResult}
               </div>
@@ -2825,7 +2825,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
                   wobbleResult.wobble?.type === 'silent' ? 'pass' :
                   wobbleResult.wobble?.type === 'shimmer' ? 'warn' : 'fail'
                 }`}>
-                  {t(`wobble_${wobbleResult.wobble?.type || 'wobble'}`)}
+                  {t("wobble_wobble")}
                   {' — '}{Math.round((1 - (wobbleResult.wobble?.overall || 0)) * 100)}% {t("wobble_tension")}
                 </div>
 
