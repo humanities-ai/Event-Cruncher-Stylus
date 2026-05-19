@@ -451,6 +451,14 @@ const Cosmos = () => {
   const [isAILockedModalOpen, setIsAILockedModalOpen] = useState(false);
   const [aiShortDescReplaced, setAiShortDescReplaced] = useState(false);
   const [aiShortDescFiles, setAiShortDescFiles] = useState([]);
+  const [isAILongDescModalOpen, setIsAILongDescModalOpen] = useState(false);
+  const [aiLongDescFace, setAiLongDescFace] = useState(null);
+  const [aiLongDescQuery, setAiLongDescQuery] = useState('');
+  const [aiLongDescResult, setAiLongDescResult] = useState('');
+  const [aiLongDescLoading, setAiLongDescLoading] = useState(false);
+  const [aiLongDescHistory, setAiLongDescHistory] = useState([]);
+  const [aiLongDescReplaced, setAiLongDescReplaced] = useState(false);
+  const [aiLongDescFiles, setAiLongDescFiles] = useState([]);
   const [shortDescFaceFiles, setShortDescFaceFiles] = useState({});
   const [longDescFaceFiles, setLongDescFaceFiles] = useState({});
 
@@ -462,6 +470,10 @@ const Cosmos = () => {
   const trashRef = useRef(null);
   const shortDescTextareaRef = useRef(null);
   const longDescTextareaRef = useRef(null);
+  const longPressTimerRef = useRef(null);
+  const longPressFiredRef = useRef(false);
+  const interactionLogRef = useRef([]);
+  const sessionStartRef = useRef(new Date());
 
   const handleWobbleEvaluate = async (modeOverride, domainOverride) => {
     const activeMode = typeof modeOverride === 'string' ? modeOverride : wobbleMode;
@@ -753,6 +765,23 @@ const Cosmos = () => {
   useEffect(() => { setIsDITextBoxVisible(true); }, []);
 
   useEffect(() => {
+    try {
+      const stored = localStorage.getItem('ecs_interaction_log');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        interactionLogRef.current = parsed.map(e => ({ ...e, timestamp: new Date(e.timestamp) }));
+      }
+    } catch {}
+    const last = interactionLogRef.current[interactionLogRef.current.length - 1];
+    const twoMinutesAgo = Date.now() - 2 * 60 * 1000;
+    const recentSessionStart = last?.type === 'session_start' && new Date(last.timestamp).getTime() > twoMinutesAgo;
+    if (!recentSessionStart) {
+      interactionLogRef.current.push({ timestamp: new Date(), type: 'session_start' });
+      try { localStorage.setItem('ecs_interaction_log', JSON.stringify(interactionLogRef.current)); } catch {}
+    }
+  }, []);
+
+  useEffect(() => {
     if (selectedFaceIndex !== null) {
       setTempFaceFiles((prev) => ({
         ...prev,
@@ -1034,6 +1063,7 @@ const Cosmos = () => {
       setInputText(faceTextsRef.current[idx] || "");
       setIsDITextBoxVisible(false);
       autoSpinRef.current = false;
+      interactionLogRef.current.push({ timestamp: new Date(), type: 'face_selected', face: faceKeys[idx] });
 
       // Normalize current rotation so the lerp takes the shortest path
       group.rotation.x = normalizeAngle(group.rotation.x);
@@ -1155,6 +1185,8 @@ const Cosmos = () => {
     setInputText("");
     setSelectedFaceIndex(null);
     setIsDITextBoxVisible(true);
+    interactionLogRef.current = [{ timestamp: new Date(), type: 'session_start' }];
+    try { localStorage.setItem('ecs_interaction_log', JSON.stringify(interactionLogRef.current)); } catch {}
   };
 
   const handleSector = async (n) => {
@@ -1208,6 +1240,8 @@ const Cosmos = () => {
       headers: { "Content-Type": "application/json" },
     });
 
+    if (inputText?.trim()) logInteraction('face_text_added', { face, text: inputText });
+
     const selectedFiles = tempFaceFiles[selectedFaceIndex]?.pending || [];
     if (selectedFiles.length > 0) {
       const formData = new FormData();
@@ -1215,6 +1249,7 @@ const Cosmos = () => {
       formData.append("face", face);
       selectedFiles.forEach((file) => formData.append("files", file));
       await fetch("http://localhost:4000/api/avfiles/upload", { method: "POST", body: formData });
+      logInteraction('face_file_uploaded', { face, files: selectedFiles.map(f => f.name).join(', ') });
     }
 
     fetchSavedData(userId);
@@ -1473,6 +1508,80 @@ const Cosmos = () => {
     setIsXlsxModalOpen(true);
   };
 
+  const logInteraction = (type, details = {}) => {
+    const entry = { timestamp: new Date(), type, ...details };
+    interactionLogRef.current.push(entry);
+    try { localStorage.setItem('ecs_interaction_log', JSON.stringify(interactionLogRef.current)); } catch {}
+  };
+
+  const generateInteractionLog = () => {
+    const fmt = (d) => `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`;
+    const lines = [
+      'ECS INTERACTION LOG',
+      '===================',
+      `User:       ${username || 'anonymous'}`,
+      `Downloaded: ${fmt(new Date())}`,
+      '',
+      'FULL HISTORY',
+      '------------',
+    ];
+    for (const e of interactionLogRef.current) {
+      const t = `[${fmt(e.timestamp)}]`;
+      switch (e.type) {
+        case 'session_start':
+          lines.push('');
+          lines.push(`── Session started: ${fmt(e.timestamp)} ──`);
+          break;
+        case 'face_selected':
+          lines.push(`${t} Surface selected — ${e.face?.toUpperCase()}`);
+          break;
+        case 'face_text_added':
+          lines.push(`${t} Text added — ${e.face?.toUpperCase()}`);
+          break;
+        case 'face_file_uploaded':
+          lines.push(`${t} File(s) uploaded to surface — ${e.face?.toUpperCase()}`);
+          break;
+        case 'short_desc_viewed':
+          lines.push(`${t} Opened short description — ${e.face?.toUpperCase()}`);
+          break;
+        case 'short_desc_saved':
+          lines.push(`${t} Saved short description — ${e.face?.toUpperCase()}`);
+          break;
+        case 'long_desc_viewed':
+          lines.push(`${t} Opened long description — ${e.face?.toUpperCase()}`);
+          break;
+        case 'long_desc_saved':
+          lines.push(`${t} Saved long description — ${e.face?.toUpperCase()}`);
+          break;
+        case 'ai_short_query':
+          lines.push(`${t} AI short description query — ${e.face?.toUpperCase()}`);
+          break;
+        case 'ai_short_applied':
+          lines.push(`${t} AI short description applied — ${e.face?.toUpperCase()}`);
+          break;
+        case 'ai_long_query':
+          lines.push(`${t} AI long description query — ${e.face?.toUpperCase()}`);
+          break;
+        case 'ai_long_applied':
+          lines.push(`${t} AI long description applied — ${e.face?.toUpperCase()}`);
+          break;
+        case 'file_uploaded':
+          lines.push(`${t} Files uploaded to ${e.descType} description — ${e.face?.toUpperCase()}`);
+          break;
+        case 'short_lock_toggled':
+          lines.push(`${t} Short description ${e.locked ? 'locked' : 'unlocked'} — ${e.face?.toUpperCase()}`);
+          break;
+        case 'long_lock_toggled':
+          lines.push(`${t} Long description ${e.locked ? 'locked' : 'unlocked'} — ${e.face?.toUpperCase()}`);
+          break;
+        default:
+          break;
+      }
+    }
+    if (interactionLogRef.current.length === 0) lines.push('No interactions recorded.');
+    return lines.join('\n');
+  };
+
   const handleDownloadClick = async () => {
     const faceLabels = faceKeys.map((k) => t(`cube_faces.${k}`));
     const zip = new JSZip();
@@ -1503,6 +1612,7 @@ const Cosmos = () => {
         }
       }
     }
+    zip.file("interaction-log.txt", generateInteractionLog());
     zip.generateAsync({ type: "blob" }).then((content) => saveAs(content, "ECSDataFolder.zip"));
   };
 
@@ -1528,7 +1638,13 @@ const Cosmos = () => {
     setTooltipPos({ x: e.clientX, y: e.clientY });
   };
 
-  const handleContainerMouseLeave = () => setHoveredQuadrant(null);
+  const handleContainerMouseLeave = () => {
+    setHoveredQuadrant(null);
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
 
   const handleOpenShortDesc = async (face) => {
     setShortDescFace(face);
@@ -1536,6 +1652,7 @@ const Cosmos = () => {
     setShortDescLocked(false);
     setIsShortDescModalOpen(true);
     fetchDescFilesForFace(face, 'short');
+    logInteraction('short_desc_viewed', { face });
     try {
       const res = await fetch(`http://localhost:4000/api/face-descriptions/${face}`);
       const data = await res.json();
@@ -1557,6 +1674,7 @@ const Cosmos = () => {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Save failed');
+      logInteraction('short_desc_saved', { face: shortDescFace, text: shortDescText });
       setIsShortDescModalOpen(false);
     } catch (err) {
       console.error('Save failed:', err);
@@ -1575,7 +1693,7 @@ const Cosmos = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, is_locked: newLocked }),
       });
-      if (res.ok) setShortDescLocked(newLocked);
+      if (res.ok) { setShortDescLocked(newLocked); logInteraction('short_lock_toggled', { face, locked: newLocked }); }
     } catch (err) {
       console.error('Lock toggle failed:', err);
     }
@@ -1603,12 +1721,123 @@ const Cosmos = () => {
     }
   };
 
+  const handleOpenAILongDesc = async (face) => {
+    let isLocked = false;
+    try {
+      const res = await fetch(`http://localhost:4000/api/face-descriptions/${face}`);
+      const data = await res.json();
+      isLocked = !!data.long_desc_locked;
+    } catch (err) {
+      console.error('Failed to check lock state:', err);
+    }
+    if (isLocked && username !== 'admin') {
+      setIsAILockedModalOpen(true);
+    } else {
+      setAiLongDescFace(face);
+      setAiLongDescQuery('');
+      setAiLongDescResult('');
+      setAiLongDescHistory([]);
+      setAiLongDescReplaced(false);
+      setAiLongDescFiles([]);
+      setIsAILongDescModalOpen(true);
+    }
+  };
+
+  const handleAILongDescQuery = async () => {
+    if (!aiLongDescQuery.trim()) return;
+    setAiLongDescLoading(true);
+    const allFaceTexts = faceKeys.reduce((acc, key, i) => {
+      acc[key] = (faceTexts[i] || '').trim();
+      return acc;
+    }, {});
+    const historyLines = aiLongDescHistory.map(h =>
+      `${h.role === 'user' ? 'User' : 'Assistant'}: ${h.content}`
+    ).join('\n');
+    const fileContext = aiLongDescFiles.length
+      ? `\nUploaded reference files: ${aiLongDescFiles.map(f => f.name).join(', ')}`
+      : '';
+    const prompt = `You are helping generate a long description for the "${aiLongDescFace}" face of a 5W1H event cube.
+
+Cube context:
+WHO: ${allFaceTexts.who || '(empty)'}
+WHAT: ${allFaceTexts.what || '(empty)'}
+WHEN: ${allFaceTexts.when || '(empty)'}
+WHERE: ${allFaceTexts.where || '(empty)'}
+WHY: ${allFaceTexts.why || '(empty)'}
+HOW: ${allFaceTexts.how || '(empty)'}
+${fileContext}${historyLines ? `\nPrevious conversation:\n${historyLines}\n` : ''}
+User query: ${aiLongDescQuery}
+
+Return only the long description text for the "${aiLongDescFace}" face, no preamble or explanation.`;
+    try {
+      const res = await fetch('http://localhost:4000/api/anthropic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Server error');
+      const result = data.text || '';
+      setAiLongDescResult(result);
+      logInteraction('ai_long_query', { face: aiLongDescFace, query: aiLongDescQuery, response: result });
+      setAiLongDescHistory(prev => [
+        ...prev,
+        { role: 'user', content: aiLongDescQuery },
+        { role: 'assistant', content: result },
+      ]);
+      setAiLongDescQuery('');
+    } catch (err) {
+      setAiLongDescResult('Error: ' + err.message);
+    } finally {
+      setAiLongDescLoading(false);
+    }
+  };
+
+  const handleAcceptAILongDesc = async () => {
+    if (!aiLongDescResult || !aiLongDescFace || !userId) return;
+    setLongDescText(aiLongDescResult);
+    try {
+      await fetch(`http://localhost:4000/api/face-descriptions/${aiLongDescFace}/long`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, long_description: aiLongDescResult }),
+      });
+    } catch (err) {
+      console.error('Failed to save AI long desc:', err);
+    }
+    let existingFiles = [];
+    try {
+      const res = await fetch(`http://localhost:4000/api/descfiles/by-face/${aiLongDescFace}/long`);
+      if (res.ok) existingFiles = await res.json();
+    } catch {}
+    await Promise.all(existingFiles.map(f =>
+      fetch(`http://localhost:4000/api/descfiles/delete/${f.id}`, { method: 'DELETE' }).catch(() => {})
+    ));
+    if (aiLongDescFiles.length) {
+      const formData = new FormData();
+      formData.append('user_id', userId);
+      formData.append('face', aiLongDescFace);
+      formData.append('desc_type', 'long');
+      aiLongDescFiles.forEach(f => formData.append('files', f));
+      try {
+        await fetch('http://localhost:4000/api/descfiles/upload', { method: 'POST', body: formData });
+      } catch (err) {
+        console.error('Failed to upload AI long desc files:', err);
+      }
+    }
+    fetchDescFilesForFace(aiLongDescFace, 'long');
+    logInteraction('ai_long_applied', { face: aiLongDescFace });
+    setAiLongDescReplaced(true);
+    setTimeout(() => setIsAILongDescModalOpen(false), 2000);
+  };
+
   const handleOpenLongDesc = async (face) => {
     setLongDescFace(face);
     setLongDescText('');
     setLongDescLocked(false);
     setIsLongDescModalOpen(true);
     fetchDescFilesForFace(face, 'long');
+    logInteraction('long_desc_viewed', { face });
     try {
       const res = await fetch(`http://localhost:4000/api/face-descriptions/${face}`);
       const data = await res.json();
@@ -1630,6 +1859,7 @@ const Cosmos = () => {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Save failed');
+      logInteraction('long_desc_saved', { face: longDescFace, text: longDescText });
       setIsLongDescModalOpen(false);
     } catch (err) {
       console.error('Save failed:', err);
@@ -1647,7 +1877,7 @@ const Cosmos = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, long_desc_locked: newLocked }),
       });
-      if (res.ok) setLongDescLocked(newLocked);
+      if (res.ok) { setLongDescLocked(newLocked); logInteraction('long_lock_toggled', { face: longDescFace, locked: newLocked }); }
     } catch (err) {
       console.error('Long lock toggle failed:', err);
     }
@@ -1689,6 +1919,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
       if (!res.ok) throw new Error(data.error || 'Server error');
       const result = data.text || '';
       setAiShortDescResult(result);
+      logInteraction('ai_short_query', { face: aiShortDescFace, query: aiShortDescQuery, response: result });
       setAiShortDescHistory(prev => [
         ...prev,
         { role: 'user', content: aiShortDescQuery },
@@ -1735,6 +1966,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
       }
     }
     fetchDescFilesForFace(aiShortDescFace, 'short');
+    logInteraction('ai_short_applied', { face: aiShortDescFace });
     setAiShortDescReplaced(true);
     setTimeout(() => setIsAIShortDescModalOpen(false), 2000);
   };
@@ -1778,7 +2010,28 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
     formData.append('desc_type', type);
     files.forEach(f => formData.append('files', f));
     await fetch('http://localhost:4000/api/descfiles/upload', { method: 'POST', body: formData });
+    logInteraction('file_uploaded', { face, descType: type, files: files.map(f => f.name).join(', ') });
     fetchDescFilesForFace(face, type);
+  };
+
+  const handleContainerMouseDown = (e) => {
+    if (selectedFaceIndex === null) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const mx = e.clientX - (rect.left + rect.width / 2);
+    const my = e.clientY - (rect.top + rect.height / 2);
+    const scale = (rect.height / 2) * 0.72;
+    const nx = mx / scale;
+    const ny = my / scale;
+    if (Math.abs(nx) + Math.abs(ny) > 1.0) return;
+    if (Math.abs(nx) < 0.34 && Math.abs(ny) < 0.34) return;
+    if (mx > 0 && my > 0) {
+      longPressFiredRef.current = false;
+      longPressTimerRef.current = setTimeout(() => {
+        longPressFiredRef.current = true;
+        longPressTimerRef.current = null;
+        handleOpenAILongDesc(faceKeys[selectedFaceIndex]);
+      }, 2000);
+    }
   };
 
   const handleContainerClick = (e) => {
@@ -1812,8 +2065,15 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
       // Bottom-left — open long description modal
       handleOpenLongDesc(faceKeys[selectedFaceIndex]);
     } else if (mx > 0 && my > 0) {
-      // Bottom-right — AI short description query
-      handleOpenAIShortDesc(faceKeys[selectedFaceIndex]);
+      // Bottom-right — short click opens AI short desc, long press (3s) opens AI long desc
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+      if (!longPressFiredRef.current) {
+        handleOpenAIShortDesc(faceKeys[selectedFaceIndex]);
+      }
+      longPressFiredRef.current = false;
     }
   };
 
@@ -1845,6 +2105,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
         className="tetrahedral-level-container"
         onMouseMove={handleContainerMouseMove}
         onMouseLeave={handleContainerMouseLeave}
+        onMouseDown={handleContainerMouseDown}
         onClick={handleContainerClick}
       />
 
@@ -1856,27 +2117,27 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
         >
           {hoveredQuadrant === 1 && (
             <>
-              <div className="tet-tooltip-title">THE WORKSPACE</div>
-              <div className="tet-tooltip-row"><span className="tet-tooltip-tag">CLICK</span> <span style={{ color: '#fff' }}>Restart the rotation.</span></div>
+              <div className="tet-tooltip-title">{t("tooltip_workspace")}</div>
+              <div className="tet-tooltip-row"><span className="tet-tooltip-tag">CLICK</span> <span style={{ color: '#fff' }}>{t("tooltip_workspace_click")}</span></div>
             </>
           )}
           {hoveredQuadrant === 2 && (
             <>
-              <div className="tet-tooltip-title">THE SHORT DESCRIPTION</div>
-              <div className="tet-tooltip-row"><span className="tet-tooltip-tag">CLICK</span> <span style={{ color: '#fff' }}>View the short description / questions for this surface.</span></div>
+              <div className="tet-tooltip-title">{t("tooltip_short_desc")}</div>
+              <div className="tet-tooltip-row"><span className="tet-tooltip-tag">CLICK</span> <span style={{ color: '#fff' }}>{t("tooltip_short_desc_click")}</span></div>
             </>
           )}
           {hoveredQuadrant === 3 && (
             <>
-              <div className="tet-tooltip-title">THE LONG DESCRIPTION</div>
-              <div className="tet-tooltip-row"><span className="tet-tooltip-tag">CLICK</span> <span style={{ color: '#fff' }}>View the long, detailed description of this surface.</span></div>
+              <div className="tet-tooltip-title">{t("tooltip_long_desc")}</div>
+              <div className="tet-tooltip-row"><span className="tet-tooltip-tag">CLICK</span> <span style={{ color: '#fff' }}>{t("tooltip_long_desc_click")}</span></div>
             </>
           )}
           {hoveredQuadrant === 4 && (
             <>
-              <div className="tet-tooltip-title">THE 5W1H LLM PROCESSOR</div>
-              <div className="tet-tooltip-row"><span className="tet-tooltip-tag">SHORT CLICK</span> Generate an AI-aided short description for this surface.</div>
-              <div className="tet-tooltip-row"><span className="tet-tooltip-tag">LONG CLICK</span> Generate an AI-aided long description for this surface.</div>
+              <div className="tet-tooltip-title">{t("tooltip_ai_processor")}</div>
+              <div className="tet-tooltip-row"><span className="tet-tooltip-tag">SHORT CLICK</span> {t("tooltip_ai_short_click")}</div>
+              <div className="tet-tooltip-row"><span className="tet-tooltip-tag">LONG CLICK</span> {t("tooltip_ai_long_click")}</div>
             </>
           )}
         </div>
@@ -1922,7 +2183,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
               {tempFaceFiles[selectedFaceIndex]?.pending.map((file, index) => (
                 <div key={`pending-${index}`} className="file-item pending">
                   <button className="delete-file-button" onClick={() => handleDeleteFile(selectedFaceIndex, index, "pending")}>X</button>
-                  <span>{file.name} (unsaved)</span>
+                  <span>{file.name} {t("unsaved_label")}</span>
                 </div>
               ))}
             </div>
@@ -1950,41 +2211,41 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
             </button>
             <div className="tet-validation-head">
               <div>
-                <h3>Face check</h3>
-                <p>Checks length automatically and uses AI to review fit and consistency.</p>
+                <h3>{t("validation_title")}</h3>
+                <p>{t("validation_subtitle")}</p>
               </div>
             </div>
 
-            {validationLoading && <div className="tet-validation-loading">Checking this face now...</div>}
+            {validationLoading && <div className="tet-validation-loading">{t("validation_loading")}</div>}
             {validationError && <div className="tet-validation-error">{validationError}</div>}
 
             {validationResult && (
               <div className="tet-validation-body">
                 <div className={`tet-validation-badge is-${validationResult.overallStatus || "warn"}`}>
-                  Overall: {getStatusLabel(validationResult.overallStatus)}
+                  {t("validation_overall")} {getStatusLabel(validationResult.overallStatus)}
                 </div>
 
                 <div className="tet-validation-grid">
                   <div className="tet-validation-card">
                     <span className={`tet-validation-pill is-${validationResult.length?.status || "warn"}`}>
-                      Length: {getStatusLabel(validationResult.length?.status)}
+                      {t("validation_length")} {getStatusLabel(validationResult.length?.status)}
                     </span>
                     <p>{validationResult.length?.message}</p>
                     <small>
-                      {validationResult.length?.wordCount || 0} words, {validationResult.length?.charCount || 0} characters
+                      {t("validation_word_count", { words: validationResult.length?.wordCount || 0, chars: validationResult.length?.charCount || 0 })}
                     </small>
                   </div>
 
                   <div className="tet-validation-card">
                     <span className={`tet-validation-pill is-${validationResult.validity?.status || "warn"}`}>
-                      Validity: {getStatusLabel(validationResult.validity?.status)}
+                      {t("validation_validity")} {getStatusLabel(validationResult.validity?.status)}
                     </span>
                     <p>{validationResult.validity?.reason}</p>
                   </div>
 
                   <div className="tet-validation-card">
                     <span className={`tet-validation-pill is-${validationResult.correctness?.status || "warn"}`}>
-                      Consistency: {getStatusLabel(validationResult.correctness?.status)}
+                      {t("validation_consistency")} {getStatusLabel(validationResult.correctness?.status)}
                     </span>
                     <p>{validationResult.correctness?.reason}</p>
                   </div>
@@ -1992,7 +2253,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
 
                 {Array.isArray(validationResult.suggestions) && validationResult.suggestions.length > 0 && (
                   <div className="tet-validation-suggestions">
-                    <strong>Suggestions</strong>
+                    <strong>{t("validation_suggestions")}</strong>
                     <ul>
                       {validationResult.suggestions.map((suggestion, index) => (
                         <li key={`${suggestion}-${index}`}>{suggestion}</li>
@@ -2024,16 +2285,16 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
           <div className="tet-validation-modal" style={{ maxWidth: '360px', textAlign: 'center' }}>
             <button className="close-button" onClick={() => setIsAILockedModalOpen(false)}>X</button>
             <div style={{ fontSize: '2rem', marginBottom: '10px' }}>🔒</div>
-            <h3 style={{ marginTop: 0, marginBottom: '10px' }}>Locked</h3>
+            <h3 style={{ marginTop: 0, marginBottom: '10px' }}>{t("ai_locked_title")}</h3>
             <p style={{ color: '#4b5563', fontSize: '0.9rem' }}>
-              The AI short description generator has been locked by the admin.
+              {t("ai_locked_msg")}
             </p>
             <button
               onClick={() => setIsAILockedModalOpen(false)}
               className="tet-mode-btn tet-mode-btn--active"
               style={{ marginTop: '16px', padding: '7px 24px' }}
             >
-              OK
+              {t("ok_button")}
             </button>
           </div>
         </div>
@@ -2045,7 +2306,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
           <div className="tet-validation-modal" style={{ maxWidth: '560px' }}>
             <button className="close-button" onClick={() => setIsAIShortDescModalOpen(false)}>X</button>
             <h3 style={{ marginTop: '-6px', marginBottom: '14px' }}>
-              Short Description Generator — {aiShortDescFace?.toUpperCase()}
+              {t("ai_short_desc_generator")} — {aiShortDescFace?.toUpperCase()}
             </h3>
 
             {aiShortDescResult && (
@@ -2064,7 +2325,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
                   onClick={handleAcceptAIShortDesc}
                   style={{ padding: '5px 14px', background: aiShortDescReplaced ? '#991b1b' : '#dc2626', border: `1.5px solid ${aiShortDescReplaced ? '#991b1b' : '#dc2626'}`, borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '0.82em', cursor: aiShortDescReplaced ? 'default' : 'pointer' }}
                 >
-                  {aiShortDescReplaced ? 'Replaced' : 'Replace Short Description'}
+                  {aiShortDescReplaced ? t("replaced") : t("replace_short_desc")}
                 </button>
               </div>
             )}
@@ -2074,7 +2335,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
                 value={aiShortDescQuery}
                 onChange={e => setAiShortDescQuery(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAIShortDescQuery(); } }}
-                placeholder={aiShortDescResult ? 'Follow-up query…' : 'Enter a query to generate a short description…'}
+                placeholder={aiShortDescResult ? t("follow_up_query") : t("ai_short_query_placeholder")}
                 rows={3}
                 style={{
                   width: '100%', boxSizing: 'border-box', padding: '10px', fontSize: '0.9rem',
@@ -2096,7 +2357,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', color: '#222' }} title="Insert files">
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', color: '#222' }} title={t("insert_files_tooltip")}>
                   <input type="file" multiple style={{ display: 'none' }} onChange={e => setAiShortDescFiles(prev => [...prev, ...Array.from(e.target.files)])} />
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '22px', height: '22px' }}>
                     <line x1="12" y1="14" x2="12" y2="3"/>
@@ -2110,7 +2371,86 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
                   className="tet-mode-btn tet-mode-btn--active"
                   style={{ padding: '7px 18px', background: '#000', borderColor: '#000', opacity: aiShortDescLoading || !aiShortDescQuery.trim() ? 0.5 : 1 }}
                 >
-                  {aiShortDescLoading ? '…' : aiShortDescResult ? 'Re-generate' : 'Generate'}
+                  {aiShortDescLoading ? '…' : aiShortDescResult ? t("regenerate") : t("generate")}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Long Description Modal */}
+      {isAILongDescModalOpen && (
+        <div className="tet-validation-modal-overlay" style={{ zIndex: 3300 }}>
+          <div className="tet-validation-modal" style={{ maxWidth: '560px' }}>
+            <button className="close-button" onClick={() => setIsAILongDescModalOpen(false)}>X</button>
+            <h3 style={{ marginTop: '-6px', marginBottom: '14px' }}>
+              {t("ai_long_desc_generator")} — {aiLongDescFace?.toUpperCase()}
+            </h3>
+
+            {aiLongDescResult && (
+              <div style={{
+                background: '#eff6ff', border: '1.5px solid #93c5fd', borderRadius: '8px',
+                padding: '12px 14px', marginBottom: '14px', fontSize: '0.92rem',
+                lineHeight: 1.6, color: '#1e3a5f', whiteSpace: 'pre-wrap',
+              }}>
+                {aiLongDescResult}
+              </div>
+            )}
+
+            {aiLongDescResult && (
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
+                <button
+                  onClick={handleAcceptAILongDesc}
+                  style={{ padding: '5px 14px', background: aiLongDescReplaced ? '#991b1b' : '#dc2626', border: `1.5px solid ${aiLongDescReplaced ? '#991b1b' : '#dc2626'}`, borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '0.82em', cursor: aiLongDescReplaced ? 'default' : 'pointer' }}
+                >
+                  {aiLongDescReplaced ? t("replaced") : t("replace_long_desc")}
+                </button>
+              </div>
+            )}
+
+            <div style={{ border: '1.5px solid #dde3ee', borderRadius: '8px', background: 'white', marginBottom: '10px' }}>
+              <textarea
+                value={aiLongDescQuery}
+                onChange={e => setAiLongDescQuery(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAILongDescQuery(); } }}
+                placeholder={aiLongDescResult ? t("follow_up_query") : t("ai_long_query_placeholder")}
+                rows={3}
+                style={{
+                  width: '100%', boxSizing: 'border-box', padding: '10px', fontSize: '0.9rem',
+                  border: 'none', borderRadius: '8px 8px 0 0', resize: 'vertical',
+                  fontFamily: 'inherit', lineHeight: 1.5,
+                }}
+              />
+              {aiLongDescFiles.length > 0 && (
+                <div style={{ borderTop: '1px solid #e5e7eb', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {aiLongDescFiles.map((file, i) => (
+                    <div key={i} className="file-item" style={{ background: '#eef2f7' }}>
+                      <button className="delete-file-button" onClick={() => setAiLongDescFiles(prev => prev.filter((_, idx) => idx !== i))}>X</button>
+                      <span style={{ color: '#1e2f52', fontSize: '0.85rem', marginLeft: '10px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', color: '#222' }} title={t("insert_files_tooltip")}>
+                  <input type="file" multiple style={{ display: 'none' }} onChange={e => setAiLongDescFiles(prev => [...prev, ...Array.from(e.target.files)])} />
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '22px', height: '22px' }}>
+                    <line x1="12" y1="14" x2="12" y2="3"/>
+                    <polyline points="8,7 12,3 16,7"/>
+                    <path d="M4 17v1.5A1.5 1.5 0 005.5 20h13a1.5 1.5 0 001.5-1.5V17"/>
+                  </svg>
+                </label>
+                <button
+                  onClick={handleAILongDescQuery}
+                  disabled={aiLongDescLoading || !aiLongDescQuery.trim()}
+                  className="tet-mode-btn tet-mode-btn--active"
+                  style={{ padding: '7px 18px', background: '#000', borderColor: '#000', opacity: aiLongDescLoading || !aiLongDescQuery.trim() ? 0.5 : 1 }}
+                >
+                  {aiLongDescLoading ? '…' : aiLongDescResult ? t("regenerate") : t("generate")}
                 </button>
               </div>
             </div>
@@ -2123,7 +2463,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
         <div className="tet-validation-modal-overlay">
           <div className="tet-validation-modal">
             <button className="close-button" onClick={() => setIsShortDescModalOpen(false)}>X</button>
-            <h3 style={{ marginTop: '-6px' }}>Short Description — {shortDescFace?.toUpperCase()}</h3>
+            <h3 style={{ marginTop: '-6px' }}>{t("short_description")} — {shortDescFace?.toUpperCase()}</h3>
 
             {(username === 'admin' || !shortDescLocked) ? (
               <div style={{ position: 'relative', marginTop: '15px', border: '1.5px solid #dde3ee', borderRadius: '8px', background: 'white' }}>
@@ -2133,7 +2473,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
                   ref={shortDescTextareaRef}
                   value={shortDescText}
                   onChange={(e) => setShortDescText(e.target.value)}
-                  placeholder="Type here..."
+                  placeholder={t("placeholder_t")}
                   rows={8}
                   style={{
                     width: '100%',
@@ -2163,7 +2503,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
               </div>
             ) : (
               <div className="tet-validation-card" style={{ minHeight: '120px', lineHeight: 1.6, fontSize: '0.92em', whiteSpace: 'pre-wrap', marginTop: '15px' }}>
-                {shortDescText || <em style={{ color: '#9ca3af' }}>No short description yet.</em>}
+                {shortDescText || <em style={{ color: '#9ca3af' }}>{t("no_short_desc")}</em>}
                 {(shortDescFaceFiles[faceKeys.indexOf(shortDescFace)]?.length ?? 0) > 0 && (
                   <div style={{ borderTop: '1px solid #e5e7eb', marginTop: '10px', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     {shortDescFaceFiles[faceKeys.indexOf(shortDescFace)].map((file, i) => (
@@ -2194,11 +2534,11 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
                       fontWeight: 600,
                     }}
                   >
-                    {shortDescLocked ? '🔒 Locked' : '🔓 Unlocked'}
+                    {shortDescLocked ? t("locked") : t("unlocked")}
                   </button>
                 ) : <span />}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', color: '#222' }} title="Insert files">
+                  <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', color: '#222' }} title={t("insert_files_tooltip")}>
                     <input type="file" multiple style={{ display: 'none' }} onChange={e => handleDescFileUpload(shortDescFace, 'short', e)} />
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '22px', height: '22px' }}>
                       <line x1="12" y1="14" x2="12" y2="3"/>
@@ -2212,7 +2552,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
                     className="tet-mode-btn tet-mode-btn--active"
                     style={{ borderRadius: '8px !important', padding: '6px 20px', opacity: shortDescSaving ? 0.5 : 1 }}
                   >
-                    {shortDescSaving ? 'Saving…' : 'Save'}
+                    {shortDescSaving ? t("saving") : t("save")}
                   </button>
                 </div>
               </div>
@@ -2226,7 +2566,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
         <div className="tet-validation-modal-overlay">
           <div className="tet-validation-modal">
             <button className="close-button" onClick={() => setIsLongDescModalOpen(false)}>X</button>
-            <h3 style={{ marginTop: '-6px' }}>Long Description — {longDescFace?.toUpperCase()}</h3>
+            <h3 style={{ marginTop: '-6px' }}>{t("long_description")} — {longDescFace?.toUpperCase()}</h3>
 
             {(username === 'admin' || !longDescLocked) ? (
               <div style={{ position: 'relative', marginTop: '15px', border: '1.5px solid #dde3ee', borderRadius: '8px', background: 'white' }}>
@@ -2236,7 +2576,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
                   ref={longDescTextareaRef}
                   value={longDescText}
                   onChange={(e) => setLongDescText(e.target.value)}
-                  placeholder="Type here..."
+                  placeholder={t("placeholder_t")}
                   rows={8}
                   style={{
                     width: '100%',
@@ -2266,7 +2606,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
               </div>
             ) : (
               <div className="tet-validation-card" style={{ minHeight: '120px', lineHeight: 1.6, fontSize: '0.92em', whiteSpace: 'pre-wrap', marginTop: '15px' }}>
-                {longDescText || <em style={{ color: '#9ca3af' }}>No long description yet.</em>}
+                {longDescText || <em style={{ color: '#9ca3af' }}>{t("no_long_desc")}</em>}
                 {(longDescFaceFiles[faceKeys.indexOf(longDescFace)]?.length ?? 0) > 0 && (
                   <div style={{ borderTop: '1px solid #e5e7eb', marginTop: '10px', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     {longDescFaceFiles[faceKeys.indexOf(longDescFace)].map((file, i) => (
@@ -2297,11 +2637,11 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
                       fontWeight: 600,
                     }}
                   >
-                    {longDescLocked ? '🔒 Locked' : '🔓 Unlocked'}
+                    {longDescLocked ? t("locked") : t("unlocked")}
                   </button>
                 ) : <span />}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', color: '#222' }} title="Insert files">
+                  <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', color: '#222' }} title={t("insert_files_tooltip")}>
                     <input type="file" multiple style={{ display: 'none' }} onChange={e => handleDescFileUpload(longDescFace, 'long', e)} />
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '22px', height: '22px' }}>
                       <line x1="12" y1="14" x2="12" y2="3"/>
@@ -2315,7 +2655,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
                     className="tet-mode-btn tet-mode-btn--active"
                     style={{ borderRadius: '8px !important', padding: '6px 20px', opacity: longDescSaving ? 0.5 : 1 }}
                   >
-                    {longDescSaving ? 'Saving…' : 'Save'}
+                    {longDescSaving ? t("saving") : t("save")}
                   </button>
                 </div>
               </div>
@@ -2330,11 +2670,11 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
           <div className="tet-validation-modal" style={{ maxWidth: '640px', background: '#cecece' }}>
             <button className="close-button" onClick={() => setIsVideoModalOpen(false)}>X</button>
             <h3 style={{ marginTop: '-6px', marginBottom: '14px' }}>
-              {videoData?.title || '5W1H Video Visual'}
+              {videoData?.title || t("video_title")}
             </h3>
 
             {videoLoading && (
-              <div className="tet-validation-loading">Generating your video…</div>
+              <div className="tet-validation-loading">{t("video_loading")}</div>
             )}
 
             {videoData?._error && (
@@ -2353,9 +2693,9 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
         <div className="tet-validation-modal-overlay">
           <div className="tet-validation-modal">
             <button className="close-button" onClick={() => setIsShareModalOpen(false)}>X</button>
-            <h3 style={{ marginTop: '-6px' }}>Share Link Ready</h3>
+            <h3 style={{ marginTop: '-6px' }}>{t("share_link_title")}</h3>
             <p style={{ fontSize: '0.85em', color: '#4b5563', margin: '4px 0 12px' }}>
-              Anyone logged in can open this link to run a simulation, generate a video, or evaluate the consistency of your data.
+              {t("share_link_msg")}
             </p>
             <div style={{
               background: '#f3f4f6', border: '1.5px solid #dde3ee', borderRadius: '8px',
@@ -2374,7 +2714,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
               className="tet-mode-btn tet-mode-btn--active"
               style={{ marginTop: '10px', padding: '7px 20px' }}
             >
-              {linkCopied ? 'Copied' : 'Copy Link'}
+              {linkCopied ? t("copied") : t("copy_link")}
             </button>
           </div>
         </div>
@@ -2385,7 +2725,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
         <div className="tet-validation-modal-overlay">
           <div className="tet-validation-modal">
             <button className="close-button" onClick={() => setIsTokenSimModalOpen(false)}>X</button>
-            <h3 style={{ marginTop: '-6px' }}>Shared by <em>{tokenSimData.username || tokenSimData.user_id || 'unknown'}</em></h3>
+            <h3 style={{ marginTop: '-6px' }}>{t("shared_by")} <em>{tokenSimData.username || tokenSimData.user_id || 'unknown'}</em></h3>
             {tokenSimData.created_at && (
               <p style={{ fontSize: '0.85em', color: '#4b5563', margin: '4px 0 12px' }}>
                 {new Date(tokenSimData.created_at).toLocaleString()}
@@ -2407,21 +2747,21 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
                 disabled={tokenSimLoading}
                 style={{ flex: 1, padding: '8px 12px', background: '#2563eb', border: '1.5px solid #2563eb', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '0.9em', cursor: tokenSimLoading ? 'not-allowed' : 'pointer', opacity: tokenSimLoading ? 0.5 : 1 }}
               >
-                {tokenSimLoading ? 'Running…' : 'Textual Simulation'}
+                {tokenSimLoading ? t("running") : t("textual_simulation")}
               </button>
               <button
                 onClick={handleRunTokenVideo}
                 disabled={videoLoading}
                 style={{ flex: 1, padding: '8px 12px', background: '#f5a623', border: '1.5px solid #f5a623', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '0.9em', cursor: videoLoading ? 'not-allowed' : 'pointer', opacity: videoLoading ? 0.5 : 1 }}
               >
-                {videoLoading ? 'Generating…' : 'Video Visual'}
+                {videoLoading ? t("generating_video") : t("video_visual")}
               </button>
               <button
                 onClick={handleRunTokenEval}
                 disabled={wobbleLoading}
                 style={{ flex: 1, padding: '8px 12px', background: '#16a34a', border: '1.5px solid #16a34a', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '0.9em', cursor: wobbleLoading ? 'not-allowed' : 'pointer', opacity: wobbleLoading ? 0.5 : 1 }}
               >
-                {wobbleLoading ? 'Evaluating…' : 'Consistency Evaluator'}
+                {wobbleLoading ? t("evaluating") : t("consistency_evaluator")}
               </button>
             </div>
           </div>
@@ -2433,7 +2773,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
         <div className="tet-validation-modal-overlay" style={{ zIndex: 3300 }}>
           <div className="tet-validation-modal">
             <button className="close-button" onClick={() => setIsWobbleModalOpen(false)}>X</button>
-            <h3>5W1H Consistency Evaluation</h3>
+            <h3>{t("wobble_title")}</h3>
 
             {/* Mode selector */}
             <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', marginTop: '10px', justifyContent: 'center' }}>
@@ -2444,14 +2784,14 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
                   disabled={wobbleLoading}
                   onClick={() => { setWobbleMode(m); handleWobbleEvaluate(m); }}
                 >
-                  {m.charAt(0).toUpperCase() + m.slice(1)}
+                  {t(`mode_${m}`)}
                 </button>
               ))}
             </div>
 
             {/* Domain selector */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '14px' }}>
-              <label style={{ fontSize: '0.82em', color: '#4b5563', fontWeight: 600 }}>Domain</label>
+              <label style={{ fontSize: '0.82em', color: '#4b5563', fontWeight: 600 }}>{t("domain_label")}</label>
               <select
                 value={wobbleDomain}
                 disabled={wobbleLoading}
@@ -2466,19 +2806,13 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
                   outline: 'none',
                 }}
               >
-                {[
-                  { value: 'general',      label: 'General' },
-                  { value: 'legal',        label: 'Legal' },
-                  { value: 'medical',      label: 'Medical' },
-                  { value: 'scientific',   label: 'Scientific' },
-                  { value: 'journalistic', label: 'Journalistic' },
-                ].map((d) => (
-                  <option key={d.value} value={d.value}>{d.label}</option>
+                {['general', 'legal', 'medical', 'scientific', 'journalistic'].map((v) => (
+                  <option key={v} value={v}>{t(`domain_${v}`)}</option>
                 ))}
               </select>
             </div>
 
-            {wobbleLoading && <div>Evaluating all faces...</div>}
+            {wobbleLoading && <div>{t("wobble_loading")}</div>}
 
             {wobbleResult?._error && (
               <div className="tet-validation-error">{wobbleResult._error}</div>
@@ -2491,16 +2825,15 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
                   wobbleResult.wobble?.type === 'silent' ? 'pass' :
                   wobbleResult.wobble?.type === 'shimmer' ? 'warn' : 'fail'
                 }`}>
-                  {wobbleResult.wobble?.type === 'silent' ? '✦ SILENT' :
-                   wobbleResult.wobble?.type === 'shimmer' ? '◈ SHIMMER' : '⟁ WOBBLE'}
-                  {' — '}{Math.round((1 - (wobbleResult.wobble?.overall || 0)) * 100)}% tension
+                  {t(`wobble_${wobbleResult.wobble?.type || 'wobble'}`)}
+                  {' — '}{Math.round((1 - (wobbleResult.wobble?.overall || 0)) * 100)}% {t("wobble_tension")}
                 </div>
 
                 {/* Tier bars */}
                 <div className="tet-validation-grid">
                   {['T1', 'T2', 'T3'].map(tier => (
                     <div key={tier} className="tet-validation-card">
-                      <strong>{tier} ({tier === 'T1' ? 'WHO/WHAT' : tier === 'T2' ? 'WHERE/WHEN' : 'HOW/WHY'})</strong>
+                      <strong>{tier} ({tier === 'T1' ? t("wobble_t1") : tier === 'T2' ? t("wobble_t2") : t("wobble_t3")})</strong>
                       <div style={{ background: '#eee', borderRadius: 4, height: 8, margin: '6px 0' }}>
                         <div style={{
                           width: `${(wobbleResult.wobble?.[tier] || 0) * 100}%`,
@@ -2516,7 +2849,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
 
                 {/* Feedback */}
                 <div className="tet-validation-suggestions">
-                  <strong>Feedback ({wobbleMode})</strong>
+                  <strong>{t("wobble_feedback")} ({wobbleMode})</strong>
                   <p>{renderMarkdown(wobbleResult.feedback)}</p>
                 </div>
                 <p><em>{renderMarkdown(wobbleResult.overall_assessment)}</em></p>
@@ -2536,10 +2869,10 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
         <div className="tet-validation-modal-overlay" style={{ zIndex: 3300 }}>
           <div className="tet-validation-modal" style={{ background: '#fdf3e8' }}>
             <button className="close-button" onClick={() => setIsSimulateModalOpen(false)}>X</button>
-            <h3>5W1H Textual Simulation</h3>
+            <h3>{t("simulate_title")}</h3>
 
             {simulateLoading && (
-              <div className="tet-validation-loading">Generating simulation…</div>
+              <div className="tet-validation-loading">{t("simulate_loading")}</div>
             )}
 
             {simulateResult?._error && (
@@ -2551,7 +2884,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
                 {/* Scenario */}
                 <div style={{ marginBottom: '16px' }}>
                   <div className="tet-validation-badge" style={{ background: '#e8f0fe', color: '#1a3a6b', marginBottom: '10px', fontSize: '0.88rem' }}>
-                    ◎ SCENARIO
+                    {t("simulate_scenario")}
                   </div>
                   <div className="tet-validation-card">
                     <p style={{ margin: 0, lineHeight: 1.6 }}>{simulateResult.scenario}</p>
@@ -2562,7 +2895,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
                 {simulateResult.gaps?.length > 0 && (
                   <div style={{ marginBottom: '16px' }}>
                     <div className="tet-validation-badge" style={{ background: '#fef3c7', color: '#78350f', marginBottom: '10px', fontSize: '0.88rem' }}>
-                      ⚠ GAPS
+                      {t("simulate_gaps")}
                     </div>
                     <div className="tet-validation-grid">
                       {simulateResult.gaps.map((g, i) => (
@@ -2581,7 +2914,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
                 {simulateResult.variations?.length > 0 && (
                   <div>
                     <div className="tet-validation-badge" style={{ background: '#f0fdf4', color: '#14532d', marginBottom: '10px', fontSize: '0.88rem' }}>
-                      ⟳ VARIATIONS
+                      {t("simulate_variations")}
                     </div>
                     <div className="tet-validation-grid">
                       {simulateResult.variations.map((v, i) => (
@@ -2604,7 +2937,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
         className="tet-ai-button tet-ai-button--icon"
         onClick={handleWobbleEvaluate}
         disabled={wobbleLoading}
-        title="Evaluate your entries for consistency and suggestions"
+        title={t("evaluate_tooltip")}
         style={{ width: '44px', height: '44px', right: '176px', background: 'transparent', padding: 0 }}
       >
         {wobbleLoading ? (
@@ -2640,7 +2973,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
         className="tet-ai-button tet-ai-button--icon"
         onClick={handleSimulate}
         disabled={simulateLoading}
-        title="Generate a textual simulation of your data"
+        title={t("simulate_tooltip")}
         style={{ width: '44px', height: '44px', right: '230px', background: 'transparent', padding: 0 }}
       >
         {simulateLoading ? (
@@ -2667,7 +3000,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
       <button
         onClick={handleGenerateVideo}
         disabled={videoLoading}
-        title="Generate a video animation using your data"
+        title={t("video_tooltip")}
         style={{
           position: 'fixed', zIndex: 1000, bottom: '50px', right: '284px',
           width: '42px', height: '42px', borderRadius: '50%',
@@ -2696,7 +3029,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
         <button
           onClick={handleShareSim}
           disabled={shareLoading}
-          title="Generate a link to share your simulation & animation"
+          title={t("share_tooltip")}
           style={{
             position: 'fixed', zIndex: 1000, bottom: '50px', right: '128px',
             width: '38px', height: '38px', background: 'transparent', border: 'none',
@@ -2716,7 +3049,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
         </button>
       )}
 
-      <button className="xlsx-button" onClick={handleXLSXClick} title="Spreadsheet view">
+      <button className="xlsx-button" onClick={handleXLSXClick} title={t("spreadsheet_tooltip")}>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="3" width="18" height="18"/>
           <line x1="3" y1="9" x2="21" y2="9"/>
@@ -2758,7 +3091,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
       )}
 
       {/* Clear Button — only shown when a face is selected and button row is visible */}
-      {selectedFaceIndex !== null && <button ref={trashRef} className="tet-clear-button" onClick={() => setShowClearConfirm(true)} title="Clear all data">
+      {selectedFaceIndex !== null && <button ref={trashRef} className="tet-clear-button" onClick={() => setShowClearConfirm(true)} title={t("clear_tooltip")}>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="3 6 5 6 21 6" />
           <path d="M19 6l-1 14H6L5 6" />
@@ -2772,17 +3105,17 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
       {showClearConfirm && (
         <div className="tet-clear-overlay">
           <div className="tet-clear-box">
-            <p>Do you want to delete all of your data?</p>
+            <p>{t("clear_confirm_msg")}</p>
             <div className="tet-clear-actions">
-              <button className="tet-clear-yes" onClick={handleClearConfirm}>Yes</button>
-              <button className="tet-clear-no" onClick={() => setShowClearConfirm(false)}>No</button>
+              <button className="tet-clear-yes" onClick={handleClearConfirm}>{t("yes_button")}</button>
+              <button className="tet-clear-no" onClick={() => setShowClearConfirm(false)}>{t("no_button")}</button>
             </div>
           </div>
         </div>
       )}
 
       {/* Download Button */}
-      <button className="download-button" onClick={handleDownloadClick} title="Download now">
+      <button className="download-button" onClick={handleDownloadClick} title={t("download_tooltip")}>
         <img src="/images/buttons/downloadButton.jpg" alt="Download Button" className="download-image" />
       </button>
 
