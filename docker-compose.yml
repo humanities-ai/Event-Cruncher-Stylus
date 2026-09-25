@@ -1,0 +1,41 @@
+name: event-cruncher
+
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      MYSQL_HOST: ecs-mysql
+      MYSQL_USER: root
+      MYSQL_PASSWORD: mysql
+      MYSQL_DATABASE: ecsdb
+    volumes:
+      - ./server/server.env:/app/server.env:ro
+    networks:
+      - ecs-net
+    restart: unless-stopped
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      HOST: 0.0.0.0
+      BROWSER: none
+      WDS_SOCKET_PORT: "0"
+      DANGEROUSLY_DISABLE_HOST_CHECK: "true"
+    depends_on:
+      - server
+    networks:
+      - ecs-net
+    restart: unless-stopped
+
+networks:
+  ecs-net:
+    name: ecs-net
+    external: true
