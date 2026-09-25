@@ -5,8 +5,6 @@ const multer = require('multer');
 const cors = require('cors');
 const path = require('path');
 const app = express();
-const dotenv = require('dotenv');
-//dotenv.config();
 const OpenAI = require('openai');
 const AdmZip = require("adm-zip");
 const XLSX = require("xlsx");
@@ -14,6 +12,11 @@ const { PDFParse } = require("pdf-parse");
 const { randomUUID } = require('crypto');
 const mammoth = require("mammoth");
 const upload = multer({ storage: multer.memoryStorage() });
+
+require("dotenv").config({
+  path: path.join(__dirname, "server.env"),
+  override: true,
+});
 
 app.use(cors({
     origin: 'http://localhost:3000',
@@ -26,27 +29,29 @@ app.use(express.json());
 
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
 
-// MySQL connection
-const db = mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
-    password: 'mysql',
-    database: 'ecsdb'
-});
+const mysqlHost = process.env.MYSQL_HOST || 'localhost';
+const mysqlUser = process.env.MYSQL_USER || 'root';
+const mysqlPassword = process.env.MYSQL_PASSWORD || 'mysql';
+const mysqlDatabase = process.env.MYSQL_DATABASE || 'ecsdb';
 
-require("dotenv").config({
-  path: path.join(__dirname, "server.env"),
-  override: true,
+const db = mysql.createConnection({
+    host: mysqlHost,
+    user: mysqlUser,
+    password: mysqlPassword,
+    database: mysqlDatabase
 });
 
 
 // Connect to the database
 db.connect((err) => {
     if (err) {
-        console.error('Could not connect to MySQL:', err.message);
+        console.error(
+            'Could not connect to MySQL (' + mysqlUser + '@' + mysqlHost + '/' + mysqlDatabase + '):',
+            err.message
+        );
         return;
     }
-    console.log('Connected to MySQL Database');
+    console.log('Connected to MySQL (' + mysqlUser + '@' + mysqlHost + '/' + mysqlDatabase + ')');
 
     db.query(`
         CREATE TABLE IF NOT EXISTS face_descriptions (
