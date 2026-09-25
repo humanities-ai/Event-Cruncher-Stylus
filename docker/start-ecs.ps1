@@ -21,9 +21,15 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "Pulling and building Debian Node images if needed..."
 docker compose build --pull
+if ($LASTEXITCODE -ne 0) {
+    throw "Image build failed. See the build output above."
+}
 
 Write-Host "Starting Event Cruncher Stylus client and server..."
 docker compose up -d
+if ($LASTEXITCODE -ne 0) {
+    throw "Containers failed to start. Ports 3000 and 4000 must be free on this machine."
+}
 
 docker compose ps
 
