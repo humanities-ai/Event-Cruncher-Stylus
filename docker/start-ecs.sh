@@ -14,6 +14,17 @@ if [[ ! -f "$server_env_path" ]]; then
   echo "Created empty server/server.env. Add NAVIGATOR_TOOLKIT_API_KEY and NAVIGATOR_CLAUDE_API_KEY there for AI features."
 fi
 
+# Load repo-root .env (see .env.example) so ports/URLs printed below match
+# what docker compose actually uses.
+if [[ -f "$repo_root/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$repo_root/.env"
+  set +a
+fi
+server_port="${SERVER_PORT:-4000}"
+client_port="${CLIENT_PORT:-3000}"
+
 if ! docker info >/dev/null 2>&1; then
   echo "Docker is not running. Start Docker and try again." >&2
   exit 1
@@ -30,8 +41,8 @@ docker compose up -d
 docker compose ps
 
 echo
-echo "Client:  http://localhost:3000"
-echo "Server:  http://localhost:4000"
+echo "Client:  http://localhost:$client_port"
+echo "Server:  http://localhost:$server_port"
 echo "MySQL:   localhost:3306  (container ecs-mysql, database ecsdb)"
 echo "Stop apps with:  docker/stop-ecs.sh"
 echo "Stop MySQL with: docker/stop-mysql.sh"

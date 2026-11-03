@@ -10,6 +10,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import "./CubicLevel.css";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
+import { API_BASE_URL } from '../config/apiConfig';
 
 const _texCache = new Map();
 
@@ -220,7 +221,7 @@ const CubicLevel = () => {
 
   const fetchSavedData = async (userId) => {
     try {
-      const response = await fetch(`http://localhost:4000/api/avdata/${userId}`);
+      const response = await fetch(`${API_BASE_URL}/api/avdata/${userId}`);
       if (!response.ok) throw new Error(`Server Error: ${response.statusText}`);
       const data = await response.json();
 
@@ -237,7 +238,7 @@ const CubicLevel = () => {
       for (let i = 0; i < 6; i++) {
         const face = faceKeys[i];
         try {
-          const fileResponse = await fetch(`http://localhost:4000/api/avfiles/${userId}/${face}`);
+          const fileResponse = await fetch(`${API_BASE_URL}/api/avfiles/${userId}/${face}`);
           if (!fileResponse.ok) throw new Error(`No files for ${face}`);
           const files = await fileResponse.json();
           newFaceFiles[i] = {
@@ -245,7 +246,7 @@ const CubicLevel = () => {
               id: file.id,
               name: file.file_name,
               type: file.file_type,
-              url: `http://localhost:4000/api/avfiles/download/${file.id}`,
+              url: `${API_BASE_URL}/api/avfiles/download/${file.id}`,
             })),
             pending: [],
           };
@@ -261,7 +262,7 @@ const CubicLevel = () => {
 
   const fetchCriteriaInstructions = async () => {
     try {
-      const response = await fetch("http://localhost:4000/api/get-criteria");
+      const response = await fetch(`${API_BASE_URL}/api/get-criteria`);
       if (!response.ok) throw new Error(`Server Error: ${response.statusText}`);
       const data = await response.json();
       setCriteriaInstructions({
@@ -645,7 +646,7 @@ materialsRef.current.forEach((mat, i) => {
     const face = faceKeys[selectedFaceIndex];
     const textColumn = `${face}_text`;
 
-    await fetch("http://localhost:4000/api/avdata/update", {
+    await fetch(`${API_BASE_URL}/api/avdata/update`, {
       method: "POST",
       body: JSON.stringify({
         user_id: userId,
@@ -661,7 +662,7 @@ materialsRef.current.forEach((mat, i) => {
       formData.append("user_id", userId);
       formData.append("face", face);
       selectedFiles.forEach((file) => formData.append("files", file));
-      await fetch("http://localhost:4000/api/avfiles/upload", {
+      await fetch(`${API_BASE_URL}/api/avfiles/upload`, {
         method: "POST",
         body: formData,
       });
@@ -696,7 +697,7 @@ materialsRef.current.forEach((mat, i) => {
     if (!faceColumn) return;
 
     try {
-      const response = await fetch("http://localhost:4000/api/update-criteria", {
+      const response = await fetch(`${API_BASE_URL}/api/update-criteria`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -745,7 +746,7 @@ materialsRef.current.forEach((mat, i) => {
     const fileId = fileToRemove?.id;
     try {
       if (type === "saved" && fileId) {
-        const response = await fetch(`http://localhost:4000/api/avfiles/delete/${fileId}`, {
+        const response = await fetch(`${API_BASE_URL}/api/avfiles/delete/${fileId}`, {
           method: "DELETE",
         });
         if (!response.ok) {

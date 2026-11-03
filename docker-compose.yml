@@ -6,12 +6,16 @@ services:
       context: ./server
       dockerfile: Dockerfile
     ports:
-      - "4000:4000"
+      - "${SERVER_PORT:-4000}:${SERVER_PORT:-4000}"
     environment:
       MYSQL_HOST: ecs-mysql
       MYSQL_USER: root
       MYSQL_PASSWORD: mysql
       MYSQL_DATABASE: ecsdb
+      SERVER_PORT: "${SERVER_PORT:-4000}"
+      # Origin(s) allowed to call this API, comma-separated. Must match
+      # wherever the client is actually served from.
+      CLIENT_ORIGIN: "${CLIENT_ORIGIN:-http://localhost:3000}"
     volumes:
       - ./server/server.env:/app/server.env:ro
     networks:
@@ -23,12 +27,17 @@ services:
       context: ./client
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "${CLIENT_PORT:-3000}:${CLIENT_PORT:-3000}"
     environment:
       HOST: 0.0.0.0
+      PORT: "${CLIENT_PORT:-3000}"
       BROWSER: none
       WDS_SOCKET_PORT: "0"
       DANGEROUSLY_DISABLE_HOST_CHECK: "true"
+      # URL the browser uses to reach the server above. Override this for
+      # any deployment where the client and server are not both reachable
+      # on localhost from the end user's browser.
+      REACT_APP_API_BASE_URL: "${REACT_APP_API_BASE_URL:-http://localhost:4000}"
     depends_on:
       - server
     networks:
