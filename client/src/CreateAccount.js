@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 
 import logo from './ECS_logo6.png';
 import './CreateAccount.css';
+import { API_BASE_URL } from './config/apiConfig';
 
 function CreateAccount() {
   const { t } = useTranslation();
@@ -53,7 +54,7 @@ function CreateAccount() {
     }
 
     try {
-      const resp = await fetch('http://localhost:4000/api/users', {
+      const resp = await fetch(`${API_BASE_URL}/api/users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),

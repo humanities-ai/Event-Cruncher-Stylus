@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 
 import logo from './ECS_logo6.png';
 import './Login.css';
+import { API_BASE_URL } from './config/apiConfig';
 
 function Login() {
   const { t } = useTranslation();
@@ -35,7 +36,7 @@ function Login() {
   const handleLogin = async (event) => {
     event.preventDefault();
     try {
-      const response = await fetch('http://localhost:4000/api/login', {
+      const response = await fetch(`${API_BASE_URL}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
@@ -113,7 +114,7 @@ function Login() {
       <div className="login-container">
         {showPopup && (
           <div className="popup-notification">
-            <div className="popup-path">localhost:3000</div>
+            <div className="popup-path">{window.location.host}</div>
             <div className="popup-message">
               {t('invalid_credentials', { defaultValue: 'Invalid username or password' })}
             </div>

@@ -9,6 +9,7 @@ import * as THREE from "three";
 import "./Cosmos.css";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
+import { API_BASE_URL } from '../config/apiConfig';
 
 // ─── TEXTURE CACHE ────────────────────────────────────────────────────────────
 const _texCache = new Map();
@@ -488,7 +489,7 @@ const Cosmos = () => {
     }, {});
 
     try {
-      const response = await fetch('http://localhost:4000/api/wobble-evaluate', {
+      const response = await fetch(`${API_BASE_URL}/api/wobble-evaluate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ faceTexts: allFaceTexts, mode: activeMode, cosmos: activeDomain })
@@ -515,7 +516,7 @@ const Cosmos = () => {
     }, {});
 
     try {
-      const response = await fetch('http://localhost:4000/api/simulate', {
+      const response = await fetch(`${API_BASE_URL}/api/simulate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ faceTexts: allFaceTexts }),
@@ -545,7 +546,7 @@ const Cosmos = () => {
       return acc;
     }, {});
     try {
-      const res = await fetch('http://localhost:4000/api/simulation-tokens', {
+      const res = await fetch(`${API_BASE_URL}/api/simulation-tokens`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ faceTexts: allFaceTexts, userId, username }),
@@ -568,7 +569,7 @@ const Cosmos = () => {
     setSimulateResult(null);
     setSimulateLoading(true);
     try {
-      const res = await fetch('http://localhost:4000/api/simulate', {
+      const res = await fetch(`${API_BASE_URL}/api/simulate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ faceTexts: tokenSimData.face_texts }),
@@ -590,7 +591,7 @@ const Cosmos = () => {
     setVideoData(null);
     setIsVideoModalOpen(true);
     try {
-      const res = await fetch('http://localhost:4000/api/generate-video', {
+      const res = await fetch(`${API_BASE_URL}/api/generate-video`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ faceTexts: tokenSimData.face_texts }),
@@ -611,7 +612,7 @@ const Cosmos = () => {
     setWobbleResult(null);
     setIsWobbleModalOpen(true);
     try {
-      const res = await fetch('http://localhost:4000/api/wobble-evaluate', {
+      const res = await fetch(`${API_BASE_URL}/api/wobble-evaluate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ faceTexts: tokenSimData.face_texts, mode: wobbleMode, cosmos: wobbleDomain }),
@@ -635,7 +636,7 @@ const Cosmos = () => {
       return acc;
     }, {});
     try {
-      const res = await fetch('http://localhost:4000/api/generate-video', {
+      const res = await fetch(`${API_BASE_URL}/api/generate-video`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ faceTexts: allFaceTexts }),
@@ -702,7 +703,7 @@ const Cosmos = () => {
     if (storedUserId) {
       setUserId(storedUserId);
       fetchSavedData(storedUserId);
-      fetch(`http://localhost:4000/api/profile/${storedUserId}`)
+      fetch(`${API_BASE_URL}/api/profile/${storedUserId}`)
         .then(r => r.json())
         .then(d => { if (d.username) setUsername(d.username); })
         .catch(() => {});
@@ -716,7 +717,7 @@ const Cosmos = () => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
     if (!token) return;
-    fetch(`http://localhost:4000/api/simulation-tokens/${token}`)
+    fetch(`${API_BASE_URL}/api/simulation-tokens/${token}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data) { setTokenSimData(data); setIsTokenSimModalOpen(true); } })
       .catch(() => {});
@@ -724,7 +725,7 @@ const Cosmos = () => {
 
   const fetchSavedData = async (uid) => {
     try {
-      const response = await fetch(`http://localhost:4000/api/avdata/${uid}`);
+      const response = await fetch(`${API_BASE_URL}/api/avdata/${uid}`);
       if (!response.ok) throw new Error(`Server Error: ${response.statusText}`);
       const data = await response.json();
       setFaceTexts({
@@ -739,7 +740,7 @@ const Cosmos = () => {
       for (let i = 0; i < 6; i++) {
         const face = faceKeys[i];
         try {
-          const fileResponse = await fetch(`http://localhost:4000/api/avfiles/${uid}/${face}`);
+          const fileResponse = await fetch(`${API_BASE_URL}/api/avfiles/${uid}/${face}`);
           if (!fileResponse.ok) throw new Error(`No files for ${face}`);
           const files = await fileResponse.json();
           newFaceFiles[i] = {
@@ -747,7 +748,7 @@ const Cosmos = () => {
               id: file.id,
               name: file.file_name,
               type: file.file_type,
-              url: `http://localhost:4000/api/avfiles/download/${file.id}`,
+              url: `${API_BASE_URL}/api/avfiles/download/${file.id}`,
             })),
             pending: [],
           };
@@ -1178,7 +1179,7 @@ const Cosmos = () => {
   const handleClearConfirm = async () => {
     setShowClearConfirm(false);
     if (!userId) return;
-    await fetch(`http://localhost:4000/api/avdata/clear/${userId}`, { method: "DELETE" });
+    await fetch(`${API_BASE_URL}/api/avdata/clear/${userId}`, { method: "DELETE" });
     setFaceTexts({});
     setFaceFiles({});
     setTempFaceFiles({});
@@ -1216,7 +1217,7 @@ const Cosmos = () => {
     setIsSectorModalOpen(true);
 
     try {
-      const res = await fetch("http://localhost:4000/api/anthropic", {
+      const res = await fetch(`${API_BASE_URL}/api/anthropic`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: meta.prompt(f) }),
@@ -1234,7 +1235,7 @@ const Cosmos = () => {
     const face = faceKeys[selectedFaceIndex];
     const textColumn = `${face}_text`;
 
-    await fetch("http://localhost:4000/api/avdata/update", {
+    await fetch(`${API_BASE_URL}/api/avdata/update`, {
       method: "POST",
       body: JSON.stringify({ user_id: userId, face: textColumn, text: inputText || "" }),
       headers: { "Content-Type": "application/json" },
@@ -1248,7 +1249,7 @@ const Cosmos = () => {
       formData.append("user_id", userId);
       formData.append("face", face);
       selectedFiles.forEach((file) => formData.append("files", file));
-      await fetch("http://localhost:4000/api/avfiles/upload", { method: "POST", body: formData });
+      await fetch(`${API_BASE_URL}/api/avfiles/upload`, { method: "POST", body: formData });
       logInteraction('face_file_uploaded', { face, files: selectedFiles.map(f => f.name).join(', ') });
     }
 
@@ -1298,7 +1299,7 @@ const Cosmos = () => {
     const fileId = fileToRemove?.id;
     try {
       if (type === "saved" && fileId) {
-        const response = await fetch(`http://localhost:4000/api/avfiles/delete/${fileId}`, { method: "DELETE" });
+        const response = await fetch(`${API_BASE_URL}/api/avfiles/delete/${fileId}`, { method: "DELETE" });
         if (!response.ok) throw new Error((await response.json()).error || "Unknown error");
       }
       const fileNameToRemove = fileToRemove?.name;
@@ -1344,7 +1345,7 @@ const Cosmos = () => {
     setValidationError("");
 
     try {
-      const response = await fetch("http://localhost:4000/api/face-validation", {
+      const response = await fetch(`${API_BASE_URL}/api/face-validation`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1654,7 +1655,7 @@ const Cosmos = () => {
     fetchDescFilesForFace(face, 'short');
     logInteraction('short_desc_viewed', { face });
     try {
-      const res = await fetch(`http://localhost:4000/api/face-descriptions/${face}`);
+      const res = await fetch(`${API_BASE_URL}/api/face-descriptions/${face}`);
       const data = await res.json();
       setShortDescText(data.short_description || '');
       setShortDescLocked(!!data.is_locked);
@@ -1667,7 +1668,7 @@ const Cosmos = () => {
     if (!shortDescFace || !userId) return;
     setShortDescSaving(true);
     try {
-      const res = await fetch(`http://localhost:4000/api/face-descriptions/${shortDescFace}/short`, {
+      const res = await fetch(`${API_BASE_URL}/api/face-descriptions/${shortDescFace}/short`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, short_description: shortDescText }),
@@ -1688,7 +1689,7 @@ const Cosmos = () => {
     if (!face || !userId) return;
     const newLocked = !shortDescLocked;
     try {
-      const res = await fetch(`http://localhost:4000/api/face-descriptions/${face}/lock`, {
+      const res = await fetch(`${API_BASE_URL}/api/face-descriptions/${face}/lock`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, is_locked: newLocked }),
@@ -1702,7 +1703,7 @@ const Cosmos = () => {
   const handleOpenAIShortDesc = async (face) => {
     let isLocked = false;
     try {
-      const res = await fetch(`http://localhost:4000/api/face-descriptions/${face}`);
+      const res = await fetch(`${API_BASE_URL}/api/face-descriptions/${face}`);
       const data = await res.json();
       isLocked = !!data.is_locked;
     } catch (err) {
@@ -1724,7 +1725,7 @@ const Cosmos = () => {
   const handleOpenAILongDesc = async (face) => {
     let isLocked = false;
     try {
-      const res = await fetch(`http://localhost:4000/api/face-descriptions/${face}`);
+      const res = await fetch(`${API_BASE_URL}/api/face-descriptions/${face}`);
       const data = await res.json();
       isLocked = !!data.long_desc_locked;
     } catch (err) {
@@ -1770,7 +1771,7 @@ User query: ${aiLongDescQuery}
 
 Return only the long description text for the "${aiLongDescFace}" face, no preamble or explanation.`;
     try {
-      const res = await fetch('http://localhost:4000/api/anthropic', {
+      const res = await fetch(`${API_BASE_URL}/api/anthropic`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt }),
@@ -1797,7 +1798,7 @@ Return only the long description text for the "${aiLongDescFace}" face, no pream
     if (!aiLongDescResult || !aiLongDescFace || !userId) return;
     setLongDescText(aiLongDescResult);
     try {
-      await fetch(`http://localhost:4000/api/face-descriptions/${aiLongDescFace}/long`, {
+      await fetch(`${API_BASE_URL}/api/face-descriptions/${aiLongDescFace}/long`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, long_description: aiLongDescResult }),
@@ -1807,11 +1808,11 @@ Return only the long description text for the "${aiLongDescFace}" face, no pream
     }
     let existingFiles = [];
     try {
-      const res = await fetch(`http://localhost:4000/api/descfiles/by-face/${aiLongDescFace}/long`);
+      const res = await fetch(`${API_BASE_URL}/api/descfiles/by-face/${aiLongDescFace}/long`);
       if (res.ok) existingFiles = await res.json();
     } catch {}
     await Promise.all(existingFiles.map(f =>
-      fetch(`http://localhost:4000/api/descfiles/delete/${f.id}`, { method: 'DELETE' }).catch(() => {})
+      fetch(`${API_BASE_URL}/api/descfiles/delete/${f.id}`, { method: 'DELETE' }).catch(() => {})
     ));
     if (aiLongDescFiles.length) {
       const formData = new FormData();
@@ -1820,7 +1821,7 @@ Return only the long description text for the "${aiLongDescFace}" face, no pream
       formData.append('desc_type', 'long');
       aiLongDescFiles.forEach(f => formData.append('files', f));
       try {
-        await fetch('http://localhost:4000/api/descfiles/upload', { method: 'POST', body: formData });
+        await fetch(`${API_BASE_URL}/api/descfiles/upload`, { method: 'POST', body: formData });
       } catch (err) {
         console.error('Failed to upload AI long desc files:', err);
       }
@@ -1839,7 +1840,7 @@ Return only the long description text for the "${aiLongDescFace}" face, no pream
     fetchDescFilesForFace(face, 'long');
     logInteraction('long_desc_viewed', { face });
     try {
-      const res = await fetch(`http://localhost:4000/api/face-descriptions/${face}`);
+      const res = await fetch(`${API_BASE_URL}/api/face-descriptions/${face}`);
       const data = await res.json();
       setLongDescText(data.long_description || '');
       setLongDescLocked(!!data.long_desc_locked);
@@ -1852,7 +1853,7 @@ Return only the long description text for the "${aiLongDescFace}" face, no pream
     if (!longDescFace || !userId) return;
     setLongDescSaving(true);
     try {
-      const res = await fetch(`http://localhost:4000/api/face-descriptions/${longDescFace}/long`, {
+      const res = await fetch(`${API_BASE_URL}/api/face-descriptions/${longDescFace}/long`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, long_description: longDescText }),
@@ -1872,7 +1873,7 @@ Return only the long description text for the "${aiLongDescFace}" face, no pream
     if (!longDescFace || !userId) return;
     const newLocked = !longDescLocked;
     try {
-      const res = await fetch(`http://localhost:4000/api/face-descriptions/${longDescFace}/long-lock`, {
+      const res = await fetch(`${API_BASE_URL}/api/face-descriptions/${longDescFace}/long-lock`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, long_desc_locked: newLocked }),
@@ -1910,7 +1911,7 @@ User query: ${aiShortDescQuery}
 
 Return only the short description text for the "${aiShortDescFace}" face, no preamble or explanation.`;
     try {
-      const res = await fetch('http://localhost:4000/api/anthropic', {
+      const res = await fetch(`${API_BASE_URL}/api/anthropic`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt }),
@@ -1937,7 +1938,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
     if (!aiShortDescResult || !aiShortDescFace || !userId) return;
     setShortDescText(aiShortDescResult);
     try {
-      await fetch(`http://localhost:4000/api/face-descriptions/${aiShortDescFace}/short`, {
+      await fetch(`${API_BASE_URL}/api/face-descriptions/${aiShortDescFace}/short`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, short_description: aiShortDescResult }),
@@ -1947,11 +1948,11 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
     }
     let existingFiles = [];
     try {
-      const res = await fetch(`http://localhost:4000/api/descfiles/by-face/${aiShortDescFace}/short`);
+      const res = await fetch(`${API_BASE_URL}/api/descfiles/by-face/${aiShortDescFace}/short`);
       if (res.ok) existingFiles = await res.json();
     } catch {}
     await Promise.all(existingFiles.map(f =>
-      fetch(`http://localhost:4000/api/descfiles/delete/${f.id}`, { method: 'DELETE' }).catch(() => {})
+      fetch(`${API_BASE_URL}/api/descfiles/delete/${f.id}`, { method: 'DELETE' }).catch(() => {})
     ));
     if (aiShortDescFiles.length) {
       const formData = new FormData();
@@ -1960,7 +1961,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
       formData.append('desc_type', 'short');
       aiShortDescFiles.forEach(f => formData.append('files', f));
       try {
-        await fetch('http://localhost:4000/api/descfiles/upload', { method: 'POST', body: formData });
+        await fetch(`${API_BASE_URL}/api/descfiles/upload`, { method: 'POST', body: formData });
       } catch (err) {
         console.error('Failed to upload AI short desc files:', err);
       }
@@ -1975,14 +1976,14 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
     const faceIndex = faceKeys.indexOf(face);
     const setter = type === 'long' ? setLongDescFaceFiles : setShortDescFaceFiles;
     try {
-      const res = await fetch(`http://localhost:4000/api/descfiles/by-face/${face}/${type}`);
+      const res = await fetch(`${API_BASE_URL}/api/descfiles/by-face/${face}/${type}`);
       if (!res.ok) return;
       const files = await res.json();
       setter(prev => ({
         ...prev,
         [faceIndex]: files.map(f => ({
           id: f.id, name: f.file_name, type: f.file_type,
-          url: `http://localhost:4000/api/descfiles/download/${f.id}`,
+          url: `${API_BASE_URL}/api/descfiles/download/${f.id}`,
         })),
       }));
     } catch {}
@@ -1991,7 +1992,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
   const handleDeleteDescFile = async (faceIndex, fileId, type) => {
     const setter = type === 'long' ? setLongDescFaceFiles : setShortDescFaceFiles;
     try {
-      await fetch(`http://localhost:4000/api/descfiles/delete/${fileId}`, { method: 'DELETE' });
+      await fetch(`${API_BASE_URL}/api/descfiles/delete/${fileId}`, { method: 'DELETE' });
       setter(prev => ({
         ...prev,
         [faceIndex]: (prev[faceIndex] || []).filter(f => f.id !== fileId),
@@ -2009,7 +2010,7 @@ Return only the short description text for the "${aiShortDescFace}" face, no pre
     formData.append('face', face);
     formData.append('desc_type', type);
     files.forEach(f => formData.append('files', f));
-    await fetch('http://localhost:4000/api/descfiles/upload', { method: 'POST', body: formData });
+    await fetch(`${API_BASE_URL}/api/descfiles/upload`, { method: 'POST', body: formData });
     logInteraction('file_uploaded', { face, descType: type, files: files.map(f => f.name).join(', ') });
     fetchDescFilesForFace(face, type);
   };
