@@ -1,0 +1,43 @@
+# Production image for the ECS client: a static Create React App build served
+# by nginx. Nothing environment-specific is baked in; the container reads its
+# settings from environment variables when it starts:
+#
+#   CLIENT_PORT            Port nginx listens on.                   (3000)
+#   API_BASE_URL           URL the browser uses for the API. Empty means
+#                          same origin (/api/...).                  ()
+#   API_UPSTREAM           Where nginx forwards /api requests.      (http://server:4000)
+#   CLIENT_MAX_BODY_SIZE   Largest request body nginx accepts.      (100m)
+#   PROXY_READ_TIMEOUT     How long nginx waits for the API.        (300s)
+#   DNS_RESOLVER           Resolver nginx uses to find the API.     (127.0.0.11, Docker's)
+
+# ---- Build stage ----
+FROM node:22-bookworm AS build
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+# ---- Runtime stage ----
+FROM nginx:stable AS runtime
+
+ENV CLIENT_PORT=3000 \
+    API_BASE_URL= \
+    API_UPSTREAM=http://server:4000 \
+    CLIENT_MAX_BODY_SIZE=100m \
+    PROXY_READ_TIMEOUT=300s \
+    DNS_RESOLVER=127.0.0.11
+
+COPY --from=build /app/build /usr/share/nginx/html
+COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
+COPY nginx/40-ecs-runtime-config.sh /docker-entrypoint.d/40-ecs-runtime-config.sh
+
+# Normalize line endings in case the files were checked out on Windows, then
+# make the start-up script executable.
+RUN sed -i 's/\r$//' /etc/nginx/templates/default.conf.template /docker-entrypoint.d/40-ecs-runtime-config.sh \
+    && chmod +x /docker-entrypoint.d/40-ecs-runtime-config.sh
+
+EXPOSE 3000

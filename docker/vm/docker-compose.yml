@@ -1,0 +1,119 @@
+# Production stack for the ECS VM (ls-llc-poiesis).
+#
+# This file is copied to the VM by hand (no repo checkout is needed there) and
+# lives next to three other files:
+#
+#   .env             Settings for this stack. Start from docker/vm/.env.example.
+#   server.env       API keys for the AI features (NAVIGATOR_*). Never in an image.
+#   init-ecsdb.sql   Baseline schema, copied from docker/init-ecsdb.sql.
+#
+# Every environment-specific value comes from .env, so changing a setting never
+# requires rebuilding an image: edit .env and run `docker compose up -d`.
+#
+# Watchtower only replaces containers labeled com.centurylinklabs.watchtower.enable,
+# which is deliberately limited to the server and the client. MySQL is never
+# updated automatically.
+
+name: ecs
+
+services:
+  mysql:
+    image: mysql:8
+    container_name: ecs-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}"
+      MYSQL_DATABASE: "${MYSQL_DATABASE:-ecsdb}"
+      # The official image creates this user with full rights on MYSQL_DATABASE,
+      # so the ECS server never needs the root account.
+      MYSQL_USER: "${MYSQL_USER:-ecs}"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}"
+    ports:
+      # Reachable from the VM itself only, for administration.
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - ecs-mysql-data:/var/lib/mysql
+      # Runs only the first time the data volume is initialized.
+      - ./init-ecsdb.sql:/docker-entrypoint-initdb.d/01-init-ecsdb.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      ecs-net:
+        aliases:
+          - mysql
+
+  server:
+    image: "${ECS_SERVER_IMAGE:-ghcr.io/humanities-ai/ecs-server:latest}"
+    container_name: ecs-server
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "${SERVER_PORT:-4000}:${SERVER_PORT:-4000}"
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_USER: "${MYSQL_USER:-ecs}"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD}"
+      MYSQL_DATABASE: "${MYSQL_DATABASE:-ecsdb}"
+      SERVER_PORT: "${SERVER_PORT:-4000}"
+      # Origin(s) allowed to call the API from a different host, comma-separated.
+      # Not consulted when the browser calls the API on the same origin as the client.
+      CLIENT_ORIGIN: "${CLIENT_ORIGIN:-http://localhost:3000}"
+    volumes:
+      - ./server.env:/app/server.env:ro
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    networks:
+      - ecs-net
+
+  client:
+    image: "${ECS_CLIENT_IMAGE:-ghcr.io/humanities-ai/ecs-client:latest}"
+    container_name: ecs-client
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "${CLIENT_PORT:-3000}:${CLIENT_PORT:-3000}"
+    environment:
+      CLIENT_PORT: "${CLIENT_PORT:-3000}"
+      # Empty means the browser calls the API on the same origin as the client.
+      API_BASE_URL: "${API_BASE_URL:-}"
+      API_UPSTREAM: "${API_UPSTREAM:-http://server:${SERVER_PORT:-4000}}"
+      CLIENT_MAX_BODY_SIZE: "${CLIENT_MAX_BODY_SIZE:-100m}"
+      PROXY_READ_TIMEOUT: "${PROXY_READ_TIMEOUT:-300s}"
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    networks:
+      - ecs-net
+
+  watchtower:
+    # Maintained fork; the original containrrr/watchtower was archived in
+    # December 2025 and does not work with Docker Engine 29 or newer.
+    image: "${WATCHTOWER_IMAGE:-nickfedor/watchtower:1.23.1}"
+    container_name: ecs-watchtower
+    restart: unless-stopped
+    environment:
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_POLL_INTERVAL: "${WATCHTOWER_POLL_INTERVAL:-300}"
+      WATCHTOWER_CLEANUP: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Credentials for the private images, stored at DOCKER_CONFIG_FILE
+      # (normally /opt/ecs/docker/config.json, created with
+      # DOCKER_CONFIG=/opt/ecs/docker docker login ghcr.io).
+      - "${DOCKER_CONFIG_FILE:?Set DOCKER_CONFIG_FILE in .env}:/config.json:ro"
+    networks:
+      - ecs-net
+
+volumes:
+  ecs-mysql-data:
+    name: ecs-mysql-data
+
+networks:
+  ecs-net:
+    name: ecs-net
