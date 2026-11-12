@@ -9,6 +9,7 @@ import * as THREE from "three";
 import "./TetrahedralLevel.css";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
+import { API_BASE_URL } from '../config/apiConfig';
 
 // ─── TEXTURE CACHE ────────────────────────────────────────────────────────────
 const _texCache = new Map();
@@ -246,7 +247,7 @@ const TetrahedralLevel = () => {
 
   const fetchSavedData = async (uid) => {
     try {
-      const response = await fetch(`http://localhost:4000/api/avdata/${uid}`);
+      const response = await fetch(`${API_BASE_URL}/api/avdata/${uid}`);
       if (!response.ok) throw new Error(`Server Error: ${response.statusText}`);
       const data = await response.json();
       setFaceTexts({
@@ -261,7 +262,7 @@ const TetrahedralLevel = () => {
       for (let i = 0; i < 6; i++) {
         const face = faceKeys[i];
         try {
-          const fileResponse = await fetch(`http://localhost:4000/api/avfiles/${uid}/${face}`);
+          const fileResponse = await fetch(`${API_BASE_URL}/api/avfiles/${uid}/${face}`);
           if (!fileResponse.ok) throw new Error(`No files for ${face}`);
           const files = await fileResponse.json();
           newFaceFiles[i] = {
@@ -269,7 +270,7 @@ const TetrahedralLevel = () => {
               id: file.id,
               name: file.file_name,
               type: file.file_type,
-              url: `http://localhost:4000/api/avfiles/download/${file.id}`,
+              url: `${API_BASE_URL}/api/avfiles/download/${file.id}`,
             })),
             pending: [],
           };
@@ -682,7 +683,7 @@ const TetrahedralLevel = () => {
   const handleClearConfirm = async () => {
     setShowClearConfirm(false);
     if (!userId) return;
-    await fetch(`http://localhost:4000/api/avdata/clear/${userId}`, { method: "DELETE" });
+    await fetch(`${API_BASE_URL}/api/avdata/clear/${userId}`, { method: "DELETE" });
     setFaceTexts({});
     setFaceFiles({});
     setTempFaceFiles({});
@@ -718,7 +719,7 @@ const TetrahedralLevel = () => {
     setIsSectorModalOpen(true);
 
     try {
-      const res = await fetch("http://localhost:4000/api/anthropic", {
+      const res = await fetch(`${API_BASE_URL}/api/anthropic`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: meta.prompt(f) }),
@@ -736,7 +737,7 @@ const TetrahedralLevel = () => {
     const face = faceKeys[selectedFaceIndex];
     const textColumn = `${face}_text`;
 
-    await fetch("http://localhost:4000/api/avdata/update", {
+    await fetch(`${API_BASE_URL}/api/avdata/update`, {
       method: "POST",
       body: JSON.stringify({ user_id: userId, face: textColumn, text: inputText || "" }),
       headers: { "Content-Type": "application/json" },
@@ -748,7 +749,7 @@ const TetrahedralLevel = () => {
       formData.append("user_id", userId);
       formData.append("face", face);
       selectedFiles.forEach((file) => formData.append("files", file));
-      await fetch("http://localhost:4000/api/avfiles/upload", { method: "POST", body: formData });
+      await fetch(`${API_BASE_URL}/api/avfiles/upload`, { method: "POST", body: formData });
     }
 
     fetchSavedData(userId);
@@ -797,7 +798,7 @@ const TetrahedralLevel = () => {
     const fileId = fileToRemove?.id;
     try {
       if (type === "saved" && fileId) {
-        const response = await fetch(`http://localhost:4000/api/avfiles/delete/${fileId}`, { method: "DELETE" });
+        const response = await fetch(`${API_BASE_URL}/api/avfiles/delete/${fileId}`, { method: "DELETE" });
         if (!response.ok) throw new Error((await response.json()).error || "Unknown error");
       }
       const fileNameToRemove = fileToRemove?.name;
@@ -843,7 +844,7 @@ const TetrahedralLevel = () => {
     setValidationError("");
 
     try {
-      const response = await fetch("http://localhost:4000/api/face-validation", {
+      const response = await fetch(`${API_BASE_URL}/api/face-validation`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

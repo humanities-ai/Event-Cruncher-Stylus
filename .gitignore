@@ -23,6 +23,7 @@ node_modules/
 server.env
 .env
 .env.*
+!.env.example
 
 # caches
 **/.cache/

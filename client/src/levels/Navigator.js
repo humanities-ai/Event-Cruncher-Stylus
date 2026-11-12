@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { Link } from "react-router-dom";
 import logo from "../ECS_logo6.png";
+import { API_BASE_URL } from '../config/apiConfig';
 
 export default function Navigator() {
   const { t } = useTranslation();
@@ -79,7 +80,7 @@ export default function Navigator() {
       uploadedFiles.forEach((f) => formData.append("files", f));
       formData.append("prompt", prompt);
 
-      const res = await fetch("http://localhost:4000/api/navigator-chat", {
+      const res = await fetch(`${API_BASE_URL}/api/navigator-chat`, {
         method: "POST",
         body: formData,
       });

@@ -18,8 +18,16 @@ require("dotenv").config({
   override: true,
 });
 
+// Comma-separated list of origins allowed to call this API, e.g.
+// "https://ecs.example.edu,https://staging.ecs.example.edu". Defaults to
+// the local client dev server so nothing changes for local development.
+const allowedClientOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:3000')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter((origin) => origin.length > 0);
+
 app.use(cors({
-    origin: 'http://localhost:3000',
+    origin: allowedClientOrigins,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true,
     exposedHeaders: ['Content-Disposition', 'Content-Type']
@@ -1587,8 +1595,9 @@ app.post('/api/anthropic', async (req, res) => {
 
 
 // Start the server
-app.listen(4000, () => {
-    console.log("Server started on port 4000");
+const serverPort = Number(process.env.SERVER_PORT) || 4000;
+app.listen(serverPort, () => {
+    console.log(`Server started on port ${serverPort}`);
 });
 
-// localhost:4000/api/avdata/1
+// Example: http://localhost:4000/api/avdata/1 (host/port configurable via SERVER_PORT)

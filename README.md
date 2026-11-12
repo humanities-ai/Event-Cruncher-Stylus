@@ -78,6 +78,24 @@ npm install pdf-parse
 npm install mammoth
 ```
 
+# Configuration
+The app works unmodified for local development but can be deployed by setting
+the variables below for the environment it runs in.
+
+Copy `.env.example` to `.env` at the repo root to configure these for
+`docker compose`:
+
+| Variable | Used by | Default | Purpose |
+| --- | --- | --- | --- |
+| `REACT_APP_API_BASE_URL` | client | `http://localhost:4000` | URL the browser uses to reach the server's API. Must be reachable from the end user's browser, e.g. `https://api.ecs.example.edu`. |
+| `CLIENT_ORIGIN` | server | `http://localhost:3000` | Origin(s) (comma-separated) allowed to call the server's API via CORS. Must match wherever the client above is served from. |
+| `SERVER_PORT` | server | `4000` | Port the server listens on. |
+| `CLIENT_PORT` | client | `3000` | Port the client dev server listens on. |
+
+Running the client or server directly with `npm start` (outside Docker)
+reads these same variables from the shell environment, or from a
+`client/.env.local` / `server/server.env` file respectively.
+
 # How-To Run the Application
 ## Frontend: 'client'
 
